@@ -42,13 +42,19 @@ def _resolve_accent(template_accent: bool, is_strong: bool, mode: AccentMode) ->
     return template_accent or is_strong
 
 
-def _candidates(seed: int | None) -> list[RudimentTemplate]:
-    pool: list[RudimentTemplate] = []
-    for t in MVP_CATALOG:
-        pool.append(t)
-        pool.append(t.mirrored())
-    random.Random(seed).shuffle(pool)
-    return pool
+# Atomic elements used only as fillers when no real rudiment fits the remaining
+# space; keeping them out of the primary pool stops patterns from collapsing into
+# nothing but single/double strokes.
+_FILLER_IDS = frozenset({"single", "double"})
+
+
+def _orientations(templates: list[RudimentTemplate]) -> list[RudimentTemplate]:
+    """Each template plus its L/R mirror."""
+    out: list[RudimentTemplate] = []
+    for t in templates:
+        out.append(t)
+        out.append(t.mirrored())
+    return out
 
 
 def generate(req: GenerateRequest) -> Phrase:
@@ -71,7 +77,9 @@ def generate(req: GenerateRequest) -> Phrase:
         msg = f"pattern too large: {total_cells} cells exceeds limit {max_cells}"
         raise GenerationError(msg)
     strong = _metric_strong_cells(req.time_sig, subdivision)
-    pool = _candidates(req.seed)
+    rng = random.Random(req.seed)
+    phrase_pool = _orientations([t for t in MVP_CATALOG if t.id not in _FILLER_IDS])
+    filler_pool = _orientations([t for t in MVP_CATALOG if t.id in _FILLER_IDS])
 
     def build(template: RudimentTemplate, pos: int) -> list[Stroke]:
         strokes: list[Stroke] = []
@@ -92,7 +100,13 @@ def generate(req: GenerateRequest) -> Phrase:
         if pos == total_cells:
             return segments
         remaining_in_bar = cells_per_bar - (pos % cells_per_bar)
-        for template in pool:
+        # Try real rudiments first (shuffled per position for variety), falling
+        # back to single/double fillers only when nothing else fits.
+        phrase_shuffled = phrase_pool[:]
+        rng.shuffle(phrase_shuffled)
+        filler_shuffled = filler_pool[:]
+        rng.shuffle(filler_shuffled)
+        for template in (*phrase_shuffled, *filler_shuffled):
             if template.length_cells > remaining_in_bar:
                 continue
             new_strokes = build(template, pos)

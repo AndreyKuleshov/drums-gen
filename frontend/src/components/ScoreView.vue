@@ -21,11 +21,46 @@ const container = ref<HTMLDivElement | null>(null)
 
 // Layout constants (px).
 const LEFT_MARGIN = 10
-const TOP = 40
-const HEIGHT = 190
+const TOP = 20
+const ROW_HEIGHT = 150
 const PX_PER_NOTE = 30
 const CLEF_TIME_WIDTH = 60
-const MIN_BAR_WIDTH = 160
+const MIN_BAR_WIDTH = 140
+const DEFAULT_LINE_WIDTH = 1000
+
+interface BarLayout {
+  bar: Phrase['bars'][number]
+  start: number
+  top: number
+  width: number
+  firstInRow: boolean
+}
+
+function layoutBars(phrase: Phrase, lineWidth: number): { rows: BarLayout[]; height: number } {
+  const rows: BarLayout[] = []
+  let x = LEFT_MARGIN
+  let top = TOP
+  let firstInRow = true
+
+  const barWidth = (bar: Phrase['bars'][number], first: boolean): number =>
+    Math.max(MIN_BAR_WIDTH, bar.strokes.length * PX_PER_NOTE + (first ? CLEF_TIME_WIDTH : 0))
+
+  for (const bar of phrase.bars) {
+    // Wrap to a new row when this bar (as a continuation) would overflow the
+    // line — but never wrap the first bar of a row (a single over-wide bar just
+    // overflows rather than looping forever).
+    if (!firstInRow && x + barWidth(bar, false) > lineWidth) {
+      top += ROW_HEIGHT
+      x = LEFT_MARGIN
+      firstInRow = true
+    }
+    const width = barWidth(bar, firstInRow)
+    rows.push({ bar, start: x, top, width, firstInRow })
+    x += width
+    firstInRow = false
+  }
+  return { rows, height: top + ROW_HEIGHT }
+}
 
 function render(phrase: Phrase): void {
   const host = container.value
@@ -34,20 +69,13 @@ function render(phrase: Phrase): void {
   const renderer = new Renderer(host, Renderer.Backends.SVG)
   const context = renderer.getContext()
 
-  // First pass: size each bar to its note count so nothing gets clipped.
-  let x = LEFT_MARGIN
-  const layout = phrase.bars.map((bar, index) => {
-    const extra = index === 0 ? CLEF_TIME_WIDTH : 0
-    const width = Math.max(MIN_BAR_WIDTH, bar.strokes.length * PX_PER_NOTE + extra)
-    const start = x
-    x += width
-    return { bar, index, start, width }
-  })
-  renderer.resize(x + LEFT_MARGIN, HEIGHT)
+  const lineWidth = host.clientWidth > 2 * MIN_BAR_WIDTH ? host.clientWidth : DEFAULT_LINE_WIDTH
+  const { rows, height } = layoutBars(phrase, lineWidth)
+  renderer.resize(lineWidth, height)
 
-  for (const { bar, index, start, width } of layout) {
-    const stave = new Stave(start, TOP, width)
-    if (index === 0) {
+  for (const { bar, start, top, width, firstInRow } of rows) {
+    const stave = new Stave(start, top, width)
+    if (firstInRow) {
       stave.addClef('percussion').addTimeSignature(`${bar.time_sig.num}/${bar.time_sig.den}`)
     }
     stave.setContext(context).draw()
