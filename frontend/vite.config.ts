@@ -3,5 +3,9 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [vue()],
-  test: { globals: true, environment: 'node' },
+  test: {
+    globals: true,
+    environment: 'node',
+    server: { deps: { inline: ['tone'] } },
+  },
 })

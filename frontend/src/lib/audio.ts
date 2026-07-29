@@ -1,3 +1,5 @@
+import * as Tone from 'tone'
+
 import type { Phrase } from '../types'
 
 export function parseFraction(s: string): number {
@@ -26,4 +28,37 @@ export function scheduleTimes(phrase: Phrase): ScheduledStroke[] {
     }
   }
   return events
+}
+
+let synth: Tone.NoiseSynth | null = null
+
+function getSynth(): Tone.NoiseSynth {
+  if (synth === null) {
+    synth = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.08, sustain: 0 },
+    })
+    const filter = new Tone.Filter(3000, 'bandpass').toDestination()
+    synth.connect(filter)
+  }
+  return synth
+}
+
+export async function playPhrase(phrase: Phrase): Promise<void> {
+  await Tone.start()
+  const transport = Tone.getTransport()
+  stopPhrase()
+  const s = getSynth()
+  for (const event of scheduleTimes(phrase)) {
+    transport.schedule((time) => {
+      s.triggerAttackRelease('16n', time, event.velocity)
+    }, event.timeSec)
+  }
+  transport.start()
+}
+
+export function stopPhrase(): void {
+  const transport = Tone.getTransport()
+  transport.stop()
+  transport.cancel(0)
 }
