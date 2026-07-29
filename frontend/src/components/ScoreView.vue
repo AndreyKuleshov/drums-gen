@@ -58,6 +58,12 @@ function render(phrase: Phrase): void {
       note.addModifier(
         new Annotation(spec.sticking).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
       )
+      // DEBUG: group number under the sticking letter.
+      note.addModifier(
+        new Annotation(String(spec.group)).setVerticalJustification(
+          AnnotationVerticalJustify.BOTTOM,
+        ),
+      )
       if (spec.accent) {
         note.addModifier(new Articulation('a>').setPosition(Modifier.Position.ABOVE))
       }
