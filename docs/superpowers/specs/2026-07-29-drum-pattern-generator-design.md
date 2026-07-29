@@ -52,19 +52,43 @@
 
 ## 3. Модель данных
 
-Чистый Python-домен, без зависимостей от web/LLM.
+Домен — **Pydantic-модели** (`BaseModel`), а не dataclasses/чистый Python. Причина:
+Pydantic даёт готовые JSON-схемы (`model_json_schema()`), которые в фазе 2
+напрямую скармливаются LLM как structured output, а также единообразную
+валидацию домена и DTO. Это осознанная зависимость домена от Pydantic ради
+упрощения будущего внедрения LLM.
 
+Длительность: `Fraction` оборачивается через `Annotated` + кастомный
+`field_validator`/сериализатор, чтобы Pydantic корректно (де)сериализовал
+`Fraction` в строку вида `"1/12"` в JSON и обратно.
+
+`hand`, `articulation`, `surface`, `accent_mode` — строковые `Enum`
+(автоматически попадают в JSON-схему как перечисления — удобно для LLM).
+
+```python
+class Stroke(BaseModel):
+    duration: FractionField          # длительность (Fraction, сериализуется как "1/12")
+    hand: Hand                        # L | R
+    accent: bool = False              # акцент (>)
+    articulation: Articulation = Articulation.NORMAL   # MVP: normal
+    surface: Surface = Surface.SNARE  # задел на мульти-поверхность
+
+class Bar(BaseModel):
+    time_sig: TimeSignature
+    strokes: list[Stroke]             # инвариант суммы длительностей (model_validator)
+
+class Phrase(BaseModel):
+    time_sig: TimeSignature
+    tempo_bpm: int
+    subdivision: FractionField
+    accent_mode: AccentMode
+    bars: list[Bar]
 ```
-Stroke {
-  duration: Fraction                                  # длительность
-  hand: L | R                                         # аппликатура
-  accent: bool                                        # акцент (>)
-  articulation: normal | flam | drag | buzz           # тип атаки (MVP: normal)
-  surface: snare                                       # задел на мульти-поверхность
-}
-Bar    { time_sig: TimeSignature, strokes: [Stroke] } # инвариант суммы длительностей
-Phrase { time_sig, tempo_bpm, subdivision, accent_mode, bars: [Bar] }
-```
+
+Инвариант такта (§2) реализуется как `model_validator(mode="after")` на `Bar`,
+инварианты правил аппликатуры (§5) держим в отдельном валидаторе-модуле (§8), а
+не в самой модели, чтобы можно было строить промежуточные невалидные состояния во
+время поиска в генераторе.
 
 ## 4. Каталог рудиментов
 
@@ -148,19 +172,19 @@ Monorepo: `backend/` + `frontend/`.
 
 ### Backend (Python, uv)
 
-Слоёная структура, ядро без внешних зависимостей.
+Слоёная структура. Единственная внешняя зависимость домена — Pydantic (см. §3).
 
 ```
-domain/      Fraction, Stroke, Bar, Phrase, TimeSignature   (чистый Python)
+domain/      Pydantic-модели: Stroke, Bar, Phrase, TimeSignature, enums, FractionField
 catalog/     рудименты как данные + флаги (mvp, violates_core_rules)
 generator/   бэктрекинг-солвер
-validator/   проверка 2 правил + инварианта такта
-serializer/  Phrase → JSON DTO для фронта
+validator/   проверка 2 правил аппликатуры
 api/         FastAPI
 ```
 
-FastAPI выбран за типизированные схемы (Pydantic), совместимость со strict
-pyright/ruff и тривиальную сериализацию DTO.
+Сериализация в JSON DTO — это `phrase.model_dump(mode="json")` самой Pydantic-модели,
+отдельный слой `serializer/` не нужен. FastAPI использует те же модели домена как
+схемы запроса/ответа: одна модель = домен + DTO + JSON-схема для LLM.
 
 **API:**
 - `POST /generate` — тело
