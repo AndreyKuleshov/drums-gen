@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 
 import { apiUrl } from '../lib/api'
 import type { Phrase } from '../types'
@@ -15,10 +15,23 @@ const form = reactive({
   accent_mode: 'rudiment',
 })
 
-const error = reactive({ message: '' })
+const subdivisions = [
+  { value: '1/8', label: '1/8' },
+  { value: '1/16', label: '1/16' },
+  { value: '1/12', label: '⅓ trip' },
+]
+const accentModes = [
+  { value: 'rudiment', label: 'Rudiment' },
+  { value: 'metric', label: 'Metric' },
+  { value: 'both', label: 'Both' },
+]
+
+const error = ref('')
+const loading = ref(false)
 
 async function submit(): Promise<void> {
-  error.message = ''
+  error.value = ''
+  loading.value = true
   try {
     const resp = await fetch(apiUrl('/generate'), {
       method: 'POST',
@@ -32,39 +45,297 @@ async function submit(): Promise<void> {
       }),
     })
     if (!resp.ok) {
-      error.message = `Generation failed (${resp.status})`
+      error.value =
+        resp.status === 422
+          ? 'Those settings can’t be scored — try a simpler meter or subdivision.'
+          : `Generation failed (${resp.status}).`
       return
     }
     emit('update:phrase', (await resp.json()) as Phrase)
   } catch {
-    error.message = 'Cannot reach the server'
+    error.value = 'Can’t reach the engine. Is the backend running?'
+  } finally {
+    loading.value = false
   }
 }
 </script>
 
 <template>
-  <form @submit.prevent="submit">
-    <label>Beats <input v-model.number="form.num" type="number" min="1" /></label>
-    <label>/ <input v-model.number="form.den" type="number" min="1" /></label>
-    <label>Bars <input v-model.number="form.num_bars" type="number" min="1" /></label>
-    <label>
-      Subdivision
-      <select v-model="form.min_subdivision">
-        <option value="1/8">1/8</option>
-        <option value="1/16">1/16</option>
-        <option value="1/12">triplet 1/12</option>
-      </select>
-    </label>
-    <label>Tempo <input v-model.number="form.tempo_bpm" type="number" min="20" /></label>
-    <label>
-      Accents
-      <select v-model="form.accent_mode">
-        <option value="rudiment">rudiment</option>
-        <option value="metric">metric</option>
-        <option value="both">both</option>
-      </select>
-    </label>
-    <button type="submit">Generate</button>
-    <p v-if="error.message" role="alert">{{ error.message }}</p>
+  <form class="panel" @submit.prevent="submit">
+    <div class="controls">
+      <div class="field field--sig">
+        <span class="field__label">Meter</span>
+        <div class="sig">
+          <input v-model.number="form.num" class="num" type="number" min="1" max="16" aria-label="Beats per bar" />
+          <span class="sig__slash">/</span>
+          <input v-model.number="form.den" class="num" type="number" min="1" max="16" aria-label="Beat unit" />
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Bars</span>
+        <input v-model.number="form.num_bars" class="num num--wide" type="number" min="1" max="64" aria-label="Number of bars" />
+      </div>
+
+      <div class="field field--seg">
+        <span class="field__label">Subdivision</span>
+        <div class="segment" role="radiogroup" aria-label="Subdivision">
+          <button
+            v-for="opt in subdivisions"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="form.min_subdivision === opt.value"
+            :class="['segment__btn', { 'is-active': form.min_subdivision === opt.value }]"
+            @click="form.min_subdivision = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Tempo</span>
+        <div class="tempo">
+          <input v-model.number="form.tempo_bpm" class="num num--wide" type="number" min="20" max="300" aria-label="Tempo" />
+          <span class="tempo__unit">BPM</span>
+        </div>
+      </div>
+
+      <div class="field field--seg field--wide">
+        <span class="field__label">Accents</span>
+        <div class="segment" role="radiogroup" aria-label="Accent mode">
+          <button
+            v-for="opt in accentModes"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="form.accent_mode === opt.value"
+            :class="['segment__btn', { 'is-active': form.accent_mode === opt.value }]"
+            @click="form.accent_mode = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <button class="generate" type="submit" :disabled="loading">
+        <span v-if="loading" class="generate__spin" aria-hidden="true" />
+        {{ loading ? 'Scoring…' : 'Generate' }}
+      </button>
+    </div>
   </form>
 </template>
+
+<style scoped>
+.panel {
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(239, 231, 216, 0.05);
+  padding: clamp(14px, 2vw, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.field--sig,
+.field:not(.field--seg) {
+  flex: 0 0 auto;
+}
+
+.field--seg {
+  flex: 1 1 200px;
+}
+
+.field--wide {
+  flex-basis: 260px;
+}
+
+.field__label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Numeric readouts — monospace for measurement, not costume */
+.num {
+  width: 68px;
+  padding: 10px 12px;
+  background: #100e0c;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  box-shadow: var(--inset);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--amber-bright);
+  text-align: center;
+  transition: border-color 0.15s ease;
+}
+
+.num--wide {
+  width: 84px;
+}
+
+.num:hover {
+  border-color: var(--edge-soft);
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sig__slash {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  color: var(--text-faint);
+}
+
+.tempo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tempo__unit {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+
+.segment {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  background: #100e0c;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset);
+}
+
+.segment__btn {
+  flex: 1 1 auto;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.segment__btn:hover {
+  color: var(--text);
+}
+
+.segment__btn.is-active {
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  border-color: var(--edge);
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), 0 0 0 1px rgba(255, 157, 60, 0.18);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.error {
+  flex: 1 1 auto;
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+.generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 30px;
+  border: 1px solid var(--amber-dim);
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+  color: #221204;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  box-shadow: var(--shadow-2), 0 0 24px -6px var(--amber-glow);
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+.generate:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: var(--shadow-2), 0 0 32px -4px var(--amber-glow);
+}
+
+.generate:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.generate:disabled {
+  filter: saturate(0.5) brightness(0.8);
+}
+
+.generate__spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(34, 18, 4, 0.4);
+  border-top-color: #221204;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .field,
+  .field--seg,
+  .field--wide {
+    flex: 1 1 100%;
+  }
+  .segment {
+    width: 100%;
+  }
+  .generate {
+    width: 100%;
+    justify-content: center;
+  }
+}
+</style>

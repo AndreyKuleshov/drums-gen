@@ -131,7 +131,8 @@ watch(
 
 <style scoped>
 .score {
+  width: 100%;
   overflow-x: auto;
-  max-width: 100%;
+  padding: 6px 10px 14px;
 }
 </style>

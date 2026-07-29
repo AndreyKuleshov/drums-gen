@@ -1,0 +1,119 @@
+/* Studio Console — design system tokens + base.
+   Use scene: drummer in a low-light practice room / stage. Dark, tactile hardware. */
+
+:root {
+  /* Chassis (warm charcoal metal) */
+  --bg: #131110;
+  --chassis: #1d1a17;
+  --panel: #24201c;
+  --raised: #2c2723;
+  --raised-hi: #37312b;
+
+  /* Warm-tinted edges (never pure gray) */
+  --edge: #3a332c;
+  --edge-soft: #2a2521;
+  --hairline: rgba(239, 231, 216, 0.08);
+
+  /* Ink on the lit display screen */
+  --screen: #efe7d6;
+  --screen-edge: #d8cdb6;
+  --ink: #17130d;
+
+  /* Amber LED accent */
+  --amber: #ff9d3c;
+  --amber-bright: #ffb45f;
+  --amber-dim: #b06a1f;
+  --amber-glow: rgba(255, 157, 60, 0.35);
+
+  /* Text (warm off-white + hue-tinted dims, no flat gray) */
+  --text: #f1e9db;
+  --text-dim: #b3a691;
+  --text-faint: #8a7e6d;
+  --danger: #ff6b5e;
+
+  /* Type */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-ui: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+
+  /* Elevation (offset + soft blur, warm-black) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 8px 24px -8px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 24px 60px -18px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --inset: inset 0 1px 0 rgba(239, 231, 216, 0.06), inset 0 -2px 6px rgba(0, 0, 0, 0.45);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--text);
+  background:
+    radial-gradient(1200px 700px at 50% -10%, #221d18 0%, rgba(34, 29, 24, 0) 60%),
+    var(--bg);
+  background-attachment: fixed;
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* VexFlow renders an SVG into the score panel outside Vue's scoped styling.
+   Recolor the engraving to a warm ink so it reads as a lit display, not raw black. */
+.score svg path,
+.score svg rect {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+
+.score svg text {
+  fill: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
