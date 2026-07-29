@@ -101,6 +101,11 @@ class Phrase(BaseModel):
 
 ### Группы
 
+- **Одиночный удар (Single Stroke)** — атомарный элемент в один удар (одна нота,
+  чередующаяся рука). Не рудимент PAS в строгом смысле, а базовый «кирпич»:
+  даёт генератору минимальную единицу для заполнения остатка такта и большего
+  разнообразия фраз (напр. одиночная нота между двумя рудиментами). Всегда `mvp`,
+  никогда `violates_core_rules`.
 - **A. Roll rudiments:** Single Stroke Roll (`R L R L`), Double Stroke Roll /
   диддлы (`R R L L`), Triple Stroke Roll, Multiple Bounce (buzz),
   Five/Six/Seven/Nine/…/Seventeen Stroke Roll.
@@ -115,7 +120,8 @@ class Phrase(BaseModel):
 
 ### MVP-подмножество
 
-Роллы (кроме нарушающих правила, напр. Triple Stroke Roll) + диддлы/парадиддлы.
+Одиночный удар (Single Stroke) + роллы (кроме нарушающих правила, напр. Triple
+Stroke Roll) + диддлы/парадиддлы.
 Флэмы, драги и любые форшлаг-ноты (grace notes) — фаза 2 (упрощает нотацию).
 
 ## 5. Правила аппликатуры (жёсткие ограничения)
