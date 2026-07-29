@@ -32,14 +32,14 @@ dev: ## Run backend + frontend together (Ctrl-C stops both)
 	@echo "Frontend -> http://localhost:$(FRONTEND_PORT)"
 	@trap 'kill 0' INT TERM; \
 	( cd $(BACKEND_DIR) && uv run uvicorn drumgen.api:app --reload --port $(BACKEND_PORT) ) & \
-	( cd $(FRONTEND_DIR) && npm run dev -- --port $(FRONTEND_PORT) ) & \
+	( cd $(FRONTEND_DIR) && VITE_API_BASE=http://localhost:$(BACKEND_PORT) npm run dev -- --port $(FRONTEND_PORT) ) & \
 	wait
 
 dev-backend: ## Run only the backend API (uvicorn, autoreload)
 	cd $(BACKEND_DIR) && uv run uvicorn drumgen.api:app --reload --port $(BACKEND_PORT)
 
-dev-frontend: ## Run only the frontend (vite dev server)
-	cd $(FRONTEND_DIR) && npm run dev -- --port $(FRONTEND_PORT)
+dev-frontend: ## Run only the frontend (vite dev server); set BACKEND_PORT to point it at the API
+	cd $(FRONTEND_DIR) && VITE_API_BASE=http://localhost:$(BACKEND_PORT) npm run dev -- --port $(FRONTEND_PORT)
 
 ## ---------- test ----------
 

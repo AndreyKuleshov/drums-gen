@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
 
+import { apiUrl } from '../lib/api'
 import type { Phrase } from '../types'
 
 const emit = defineEmits<{ (e: 'update:phrase', phrase: Phrase): void }>()
@@ -19,7 +20,7 @@ const error = reactive({ message: '' })
 async function submit(): Promise<void> {
   error.message = ''
   try {
-    const resp = await fetch('http://localhost:8000/generate', {
+    const resp = await fetch(apiUrl('/generate'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

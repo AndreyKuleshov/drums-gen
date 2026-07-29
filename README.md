@@ -2,6 +2,17 @@
 
 Generates valid snare-drum rudiment patterns, renders them as notation, and plays them back.
 
+## Quick start
+
+    make install
+    make dev            # backend :8000 + frontend :5173
+
+If port 8000 is taken, pick another — the frontend follows automatically:
+
+    make dev BACKEND_PORT=8010
+
+The frontend reads the API base from `VITE_API_BASE` (default `http://localhost:8000`).
+
 ## Backend
 
     cd backend
