@@ -7,6 +7,12 @@ import ScoreView from './components/ScoreView.vue'
 import type { Phrase } from './types'
 
 const phrase = ref<Phrase | null>(null)
+const activeStep = ref<number | null>(null)
+
+function onGenerated(next: Phrase): void {
+  activeStep.value = null
+  phrase.value = next
+}
 </script>
 
 <template>
@@ -25,7 +31,7 @@ const phrase = ref<Phrase | null>(null)
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <ScoreView v-if="phrase" :phrase="phrase" />
+          <ScoreView v-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <span class="screen__empty-glyph" aria-hidden="true">&#9833;</span>
             <p class="screen__empty-text">
@@ -35,9 +41,9 @@ const phrase = ref<Phrase | null>(null)
         </div>
       </section>
 
-      <PlayerControls :phrase="phrase" />
+      <PlayerControls :phrase="phrase" @step="activeStep = $event" />
 
-      <GenerationForm @update:phrase="phrase = $event" />
+      <GenerationForm @update:phrase="onGenerated" />
     </div>
   </main>
 </template>

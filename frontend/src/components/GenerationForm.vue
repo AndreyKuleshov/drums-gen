@@ -3,22 +3,23 @@ import { reactive, ref } from 'vue'
 
 import { apiUrl } from '../lib/api'
 import type { Phrase } from '../types'
+import Stepper from './Stepper.vue'
 
 const emit = defineEmits<{ (e: 'update:phrase', phrase: Phrase): void }>()
 
 const form = reactive({
   num: 4,
   den: 4,
-  num_bars: 1,
-  min_subdivision: '1/16',
+  num_bars: 2,
+  base: '1/16',
+  triplet: false,
   tempo_bpm: 100,
   accent_mode: 'rudiment',
 })
 
-const subdivisions = [
+const bases = [
   { value: '1/8', label: '1/8' },
   { value: '1/16', label: '1/16' },
-  { value: '1/12', label: '⅓ trip' },
 ]
 const accentModes = [
   { value: 'rudiment', label: 'Rudiment' },
@@ -26,12 +27,16 @@ const accentModes = [
   { value: 'both', label: 'Both' },
 ]
 
+// Triplet turns a straight subdivision into its triplet grid (1/8 -> 1/12, 1/16 -> 1/24).
+const TRIPLET_OF: Record<string, string> = { '1/8': '1/12', '1/16': '1/24' }
+
 const error = ref('')
 const loading = ref(false)
 
 async function submit(): Promise<void> {
   error.value = ''
   loading.value = true
+  const subdivision = form.triplet ? (TRIPLET_OF[form.base] ?? form.base) : form.base
   try {
     const resp = await fetch(apiUrl('/generate'), {
       method: 'POST',
@@ -39,7 +44,7 @@ async function submit(): Promise<void> {
       body: JSON.stringify({
         time_sig: { num: form.num, den: form.den },
         num_bars: form.num_bars,
-        min_subdivision: form.min_subdivision,
+        min_subdivision: subdivision,
         tempo_bpm: form.tempo_bpm,
         accent_mode: form.accent_mode,
       }),
@@ -66,30 +71,42 @@ async function submit(): Promise<void> {
       <div class="field field--sig">
         <span class="field__label">Meter</span>
         <div class="sig">
-          <input v-model.number="form.num" class="num" type="number" min="1" max="16" aria-label="Beats per bar" />
+          <Stepper v-model="form.num" :min="1" :max="16" label="Beats per bar" />
           <span class="sig__slash">/</span>
-          <input v-model.number="form.den" class="num" type="number" min="1" max="16" aria-label="Beat unit" />
+          <Stepper v-model="form.den" :min="1" :max="16" label="Beat unit" />
         </div>
       </div>
 
       <div class="field">
         <span class="field__label">Bars</span>
-        <input v-model.number="form.num_bars" class="num num--wide" type="number" min="1" max="64" aria-label="Number of bars" />
+        <Stepper v-model="form.num_bars" :min="1" :max="64" label="Number of bars" />
       </div>
 
       <div class="field field--seg">
         <span class="field__label">Subdivision</span>
-        <div class="segment" role="radiogroup" aria-label="Subdivision">
+        <div class="subdiv">
+          <div class="segment" role="radiogroup" aria-label="Subdivision">
+            <button
+              v-for="opt in bases"
+              :key="opt.value"
+              type="button"
+              role="radio"
+              :aria-checked="form.base === opt.value"
+              :class="['segment__btn', { 'is-active': form.base === opt.value }]"
+              @click="form.base = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
           <button
-            v-for="opt in subdivisions"
-            :key="opt.value"
             type="button"
-            role="radio"
-            :aria-checked="form.min_subdivision === opt.value"
-            :class="['segment__btn', { 'is-active': form.min_subdivision === opt.value }]"
-            @click="form.min_subdivision = opt.value"
+            role="switch"
+            :aria-checked="form.triplet"
+            :class="['toggle', { 'is-on': form.triplet }]"
+            @click="form.triplet = !form.triplet"
           >
-            {{ opt.label }}
+            <span class="toggle__led" aria-hidden="true" />
+            Triplet
           </button>
         </div>
       </div>
@@ -97,7 +114,7 @@ async function submit(): Promise<void> {
       <div class="field">
         <span class="field__label">Tempo</span>
         <div class="tempo">
-          <input v-model.number="form.tempo_bpm" class="num num--wide" type="number" min="20" max="300" aria-label="Tempo" />
+          <Stepper v-model="form.tempo_bpm" :min="20" :max="300" :step="2" label="Tempo" />
           <span class="tempo__unit">BPM</span>
         </div>
       </div>
@@ -176,34 +193,10 @@ async function submit(): Promise<void> {
   color: var(--text-faint);
 }
 
-/* Numeric readouts — monospace for measurement, not costume */
-.num {
-  width: 68px;
-  padding: 10px 12px;
-  background: #100e0c;
-  border: 1px solid var(--edge);
-  border-radius: var(--r-sm);
-  box-shadow: var(--inset);
-  font-family: var(--font-mono);
-  font-size: 1.05rem;
-  font-weight: 500;
-  color: var(--amber-bright);
-  text-align: center;
-  transition: border-color 0.15s ease;
-}
-
-.num--wide {
-  width: 84px;
-}
-
-.num:hover {
-  border-color: var(--edge-soft);
-}
-
 .sig {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .sig__slash {
@@ -223,6 +216,53 @@ async function submit(): Promise<void> {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   color: var(--text-faint);
+}
+
+.subdiv {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-1);
+  transition:
+    color 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.toggle:hover {
+  color: var(--text);
+}
+
+.toggle.is-on {
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.25);
+}
+
+.toggle__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--edge);
+}
+
+.toggle.is-on .toggle__led {
+  background: var(--amber);
+  box-shadow: 0 0 9px 1px var(--amber-glow);
 }
 
 .segment {

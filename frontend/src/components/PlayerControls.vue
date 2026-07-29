@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 
-import { parseFraction, playPhrase, stopPhrase } from '../lib/audio'
+import { playPhrase, stopPhrase } from '../lib/audio'
 import type { Phrase } from '../types'
 
 const props = defineProps<{ phrase: Phrase | null }>()
+const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
-let timer: ReturnType<typeof setTimeout> | null = null
+const metronome = ref(false)
 
 const meta = computed(() => {
   if (props.phrase === null) return null
@@ -15,29 +16,26 @@ const meta = computed(() => {
   return { tempo: props.phrase.tempo_bpm, bars: props.phrase.bars.length, notes: strokes.length }
 })
 
-function durationSec(phrase: Phrase): number {
-  const wholeNotes = phrase.bars
-    .flatMap((b) => b.strokes)
-    .reduce((sum, s) => sum + parseFraction(s.duration), 0)
-  return wholeNotes * (240 / phrase.tempo_bpm)
-}
-
 async function onPlay(): Promise<void> {
   if (props.phrase === null) return
-  if (timer !== null) clearTimeout(timer)
-  await playPhrase(props.phrase)
   playing.value = true
-  timer = setTimeout(() => (playing.value = false), durationSec(props.phrase) * 1000 + 250)
+  await playPhrase(props.phrase, {
+    metronome: metronome.value,
+    onStep: (index) => emit('step', index),
+    onEnd: () => {
+      playing.value = false
+    },
+  })
 }
 
 function onStop(): void {
   stopPhrase()
   playing.value = false
-  if (timer !== null) clearTimeout(timer)
+  emit('step', null)
 }
 
 onBeforeUnmount(() => {
-  if (timer !== null) clearTimeout(timer)
+  stopPhrase()
 })
 </script>
 
@@ -60,6 +58,18 @@ onBeforeUnmount(() => {
           <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
         </svg>
       </button>
+      <button
+        class="metro"
+        type="button"
+        role="switch"
+        :aria-checked="metronome"
+        :class="{ 'is-on': metronome }"
+        @click="metronome = !metronome"
+      >
+        <span class="metro__led" aria-hidden="true" />
+        Metronome
+      </button>
+
       <span class="status">
         <span class="status__led" :class="{ 'status__led--on': playing }" aria-hidden="true" />
         {{ playing ? 'Playing' : phrase ? 'Ready' : 'No pattern' }}
@@ -148,6 +158,46 @@ onBeforeUnmount(() => {
 .play:disabled,
 .stop:disabled {
   filter: saturate(0.4) brightness(0.7);
+}
+
+.metro {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-1);
+  transition:
+    color 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.metro:hover {
+  color: var(--text);
+}
+
+.metro.is-on {
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.25);
+}
+
+.metro__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--edge);
+}
+
+.metro.is-on .metro__led {
+  background: var(--amber);
+  box-shadow: 0 0 9px 1px var(--amber-glow);
 }
 
 .status {

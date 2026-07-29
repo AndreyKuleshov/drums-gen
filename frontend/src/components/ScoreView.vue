@@ -16,8 +16,11 @@ import { ref, watch } from 'vue'
 import { barToNoteSpecs, beamGroups, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase | null }>()
+const props = defineProps<{ phrase: Phrase | null; activeStep?: number | null }>()
 const container = ref<HTMLDivElement | null>(null)
+
+// SVG <g> element for each note, in global order, for playback highlighting.
+let noteEls: (SVGElement | undefined)[] = []
 
 // Layout constants (px).
 const LEFT_MARGIN = 10
@@ -72,6 +75,7 @@ function render(phrase: Phrase): void {
   const lineWidth = host.clientWidth > 2 * MIN_BAR_WIDTH ? host.clientWidth : DEFAULT_LINE_WIDTH
   const { rows, height } = layoutBars(phrase, lineWidth)
   renderer.resize(lineWidth, height)
+  noteEls = []
 
   for (const { bar, start, top, width, firstInRow } of rows) {
     const stave = new Stave(start, top, width)
@@ -85,12 +89,6 @@ function render(phrase: Phrase): void {
       const note = new StaveNote({ keys: ['b/4'], duration: spec.duration })
       note.addModifier(
         new Annotation(spec.sticking).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
-      )
-      // DEBUG: group number under the sticking letter.
-      note.addModifier(
-        new Annotation(String(spec.group)).setVerticalJustification(
-          AnnotationVerticalJustify.BOTTOM,
-        ),
       )
       if (spec.accent) {
         note.addModifier(new Articulation('a>').setPosition(Modifier.Position.ABOVE))
@@ -113,15 +111,37 @@ function render(phrase: Phrase): void {
     Formatter.FormatAndDraw(context, stave, notes)
     beams.forEach((beam) => beam.setContext(context).draw())
     tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+
+    for (const note of notes) noteEls.push(note.getSVGElement())
+  }
+}
+
+const ACTIVE_CLASS = 'note-active'
+let litEl: SVGElement | undefined
+
+function highlight(index: number | null | undefined): void {
+  litEl?.classList.remove(ACTIVE_CLASS)
+  litEl = undefined
+  if (index === null || index === undefined) return
+  const el = noteEls[index]
+  if (el) {
+    el.classList.add(ACTIVE_CLASS)
+    litEl = el
   }
 }
 
 watch(
   () => props.phrase,
   (phrase) => {
+    litEl = undefined
     if (phrase !== null) render(phrase)
   },
   { immediate: true },
+)
+
+watch(
+  () => props.activeStep,
+  (index) => highlight(index),
 )
 </script>
 
