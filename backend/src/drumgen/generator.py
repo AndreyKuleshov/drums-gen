@@ -16,7 +16,7 @@ class GenerationError(Exception):
 
 class GenerateRequest(BaseModel):
     time_sig: TimeSignature
-    num_bars: int = Field(ge=1)
+    num_bars: int = Field(ge=1, le=64)
     min_subdivision: FractionField
     tempo_bpm: int = Field(ge=1)
     accent_mode: AccentMode
@@ -66,6 +66,10 @@ def generate(req: GenerateRequest) -> Phrase:
 
     cells_per_bar = cells_ratio.numerator
     total_cells = cells_per_bar * req.num_bars
+    max_cells = 1024
+    if total_cells > max_cells:
+        msg = f"pattern too large: {total_cells} cells exceeds limit {max_cells}"
+        raise GenerationError(msg)
     strong = _metric_strong_cells(req.time_sig, subdivision)
     pool = _candidates(req.seed)
 

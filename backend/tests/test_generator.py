@@ -56,6 +56,19 @@ def test_generate_rejects_nonpositive_subdivision():
         generate(_req(min_subdivision=Fraction(0)))
 
 
+def test_generate_rejects_oversized_cell_count():
+    # 64 bars * (12/8)/(1/24) = 64 * 36 = 2304 cells > 1024 limit,
+    # while num_bars itself stays within the <=64 Field bound.
+    with pytest.raises(GenerationError):
+        generate(
+            _req(
+                time_sig=TimeSignature(num=12, den=8),
+                num_bars=64,
+                min_subdivision=Fraction(1, 24),
+            )
+        )
+
+
 def test_metric_strong_cells_simple_meter():
     assert _metric_strong_cells(TimeSignature(num=4, den=4), Fraction(1, 8)) == {0, 2, 4, 6}
 

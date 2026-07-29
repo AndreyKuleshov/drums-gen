@@ -65,6 +65,34 @@ def test_generate_endpoint_nonpositive_tempo_returns_422():
     assert resp.status_code == 422
 
 
+def test_generate_endpoint_excessive_num_bars_returns_422():
+    resp = client.post(
+        "/generate",
+        json={
+            "time_sig": {"num": 4, "den": 4},
+            "num_bars": 200,
+            "min_subdivision": "1/16",
+            "tempo_bpm": 100,
+            "accent_mode": "rudiment",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_generate_endpoint_oversized_cell_count_returns_422_not_500():
+    resp = client.post(
+        "/generate",
+        json={
+            "time_sig": {"num": 12, "den": 8},
+            "num_bars": 64,
+            "min_subdivision": "1/24",
+            "tempo_bpm": 100,
+            "accent_mode": "rudiment",
+        },
+    )
+    assert resp.status_code == 422
+
+
 def test_rudiments_endpoint():
     resp = client.get("/rudiments")
     assert resp.status_code == 200
