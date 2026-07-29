@@ -18,22 +18,26 @@ const error = reactive({ message: '' })
 
 async function submit(): Promise<void> {
   error.message = ''
-  const resp = await fetch('http://localhost:8000/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      time_sig: { num: form.num, den: form.den },
-      num_bars: form.num_bars,
-      min_subdivision: form.min_subdivision,
-      tempo_bpm: form.tempo_bpm,
-      accent_mode: form.accent_mode,
-    }),
-  })
-  if (!resp.ok) {
-    error.message = `Generation failed (${resp.status})`
-    return
+  try {
+    const resp = await fetch('http://localhost:8000/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        time_sig: { num: form.num, den: form.den },
+        num_bars: form.num_bars,
+        min_subdivision: form.min_subdivision,
+        tempo_bpm: form.tempo_bpm,
+        accent_mode: form.accent_mode,
+      }),
+    })
+    if (!resp.ok) {
+      error.message = `Generation failed (${resp.status})`
+      return
+    }
+    emit('update:phrase', (await resp.json()) as Phrase)
+  } catch {
+    error.message = 'Cannot reach the server'
   }
-  emit('update:phrase', (await resp.json()) as Phrase)
 }
 </script>
 

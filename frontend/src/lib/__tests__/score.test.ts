@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Bar } from '../../types'
-import { barToNoteSpecs, vexDuration } from '../score'
+import { barToNoteSpecs, isTripletDuration, vexDuration } from '../score'
 
 describe('vexDuration', () => {
   it('maps common durations', () => {
@@ -13,6 +13,13 @@ describe('vexDuration', () => {
 
   it('throws on unsupported', () => {
     expect(() => vexDuration('1/7')).toThrow()
+  })
+})
+
+describe('isTripletDuration', () => {
+  it('identifies triplet-based subdivisions', () => {
+    expect(isTripletDuration('1/12')).toBe(true)
+    expect(isTripletDuration('1/16')).toBe(false)
   })
 })
 

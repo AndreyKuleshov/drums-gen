@@ -8,10 +8,11 @@ import {
   Renderer,
   Stave,
   StaveNote,
+  Tuplet,
 } from 'vexflow'
 import { ref, watch } from 'vue'
 
-import { barToNoteSpecs } from '../lib/score'
+import { barToNoteSpecs, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
 
 const props = defineProps<{ phrase: Phrase | null }>()
@@ -44,6 +45,14 @@ function render(phrase: Phrase): void {
       return note
     })
     Formatter.FormatAndDraw(context, stave, notes)
+
+    const triplet = bar.strokes.length > 0 && isTripletDuration(bar.strokes[0].duration)
+    if (triplet) {
+      for (let i = 0; i + 3 <= notes.length; i += 3) {
+        const tuplet = new Tuplet(notes.slice(i, i + 3), { num_notes: 3, notes_occupied: 2 })
+        tuplet.setContext(context).draw()
+      }
+    }
   })
 }
 

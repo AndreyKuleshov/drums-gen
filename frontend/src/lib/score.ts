@@ -1,7 +1,7 @@
 import type { Bar } from '../types'
 
 const DURATION_MAP: Record<string, string> = {
-  '1': 'w',
+  '1/1': 'w',
   '1/2': 'h',
   '1/4': 'q',
   '1/8': '8',
@@ -10,6 +10,12 @@ const DURATION_MAP: Record<string, string> = {
   '1/12': '8', // eighth-note triplet base
   '1/24': '16', // sixteenth-note triplet base
   '1/6': 'q', // quarter-note triplet base
+}
+
+const TRIPLET_DURATIONS = new Set(['1/6', '1/12', '1/24'])
+
+export function isTripletDuration(subdivision: string): boolean {
+  return TRIPLET_DURATIONS.has(subdivision)
 }
 
 export function vexDuration(subdivision: string): string {
