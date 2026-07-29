@@ -1,7 +1,7 @@
 import random
 from fractions import Fraction
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from drumgen.catalog import MVP_CATALOG, RudimentTemplate
 from drumgen.domain.enums import AccentMode
@@ -16,21 +16,22 @@ class GenerationError(Exception):
 
 class GenerateRequest(BaseModel):
     time_sig: TimeSignature
-    num_bars: int
+    num_bars: int = Field(ge=1)
     min_subdivision: FractionField
-    tempo_bpm: int
+    tempo_bpm: int = Field(ge=1)
     accent_mode: AccentMode
     seed: int | None = None
 
 
 def _metric_strong_cells(time_sig: TimeSignature, subdivision: Fraction) -> set[int]:
-    cells_per_beat = time_sig.beat_length / subdivision
-    if cells_per_beat.denominator != 1:
-        return {0}
-    step = cells_per_beat.numerator
+    beat = time_sig.beat_length
     cells_per_bar = time_sig.bar_length / subdivision
     n = cells_per_bar.numerator
-    return {i for i in range(n) if i % step == 0}
+    strong: set[int] = set()
+    for i in range(n):
+        if ((subdivision * i) / beat).denominator == 1:
+            strong.add(i)
+    return strong
 
 
 def _resolve_accent(template_accent: bool, is_strong: bool, mode: AccentMode) -> bool:
@@ -52,6 +53,9 @@ def _candidates(seed: int | None) -> list[RudimentTemplate]:
 
 def generate(req: GenerateRequest) -> Phrase:
     subdivision = req.min_subdivision
+    if subdivision <= 0:
+        msg = f"min_subdivision must be positive, got {subdivision}"
+        raise GenerationError(msg)
     cells_ratio = req.time_sig.bar_length / subdivision
     if cells_ratio.denominator != 1 or cells_ratio.numerator < 1:
         msg = f"bar {req.time_sig.bar_length} not divisible by subdivision {subdivision}"

@@ -6,7 +6,12 @@ from hypothesis import strategies as st
 
 from drumgen.domain.enums import AccentMode
 from drumgen.domain.models import TimeSignature
-from drumgen.generator import GenerateRequest, GenerationError, generate
+from drumgen.generator import (
+    GenerateRequest,
+    GenerationError,
+    _metric_strong_cells,  # pyright: ignore[reportPrivateUsage]
+    generate,
+)
 from drumgen.rules import find_violations
 
 
@@ -44,6 +49,19 @@ def test_generate_rejects_non_integer_grid():
     # 3/8 bar with triplet-16th 1/24 grid -> (3/8)/(1/24) = 9 -> ok; use a mismatch instead
     with pytest.raises(GenerationError):
         generate(_req(time_sig=TimeSignature(num=3, den=8), min_subdivision=Fraction(1, 5)))
+
+
+def test_generate_rejects_nonpositive_subdivision():
+    with pytest.raises(GenerationError):
+        generate(_req(min_subdivision=Fraction(0)))
+
+
+def test_metric_strong_cells_simple_meter():
+    assert _metric_strong_cells(TimeSignature(num=4, den=4), Fraction(1, 8)) == {0, 2, 4, 6}
+
+
+def test_metric_strong_cells_compound_meter():
+    assert _metric_strong_cells(TimeSignature(num=6, den=8), Fraction(1, 8)) == {0, 3}
 
 
 def test_seed_is_reproducible():
