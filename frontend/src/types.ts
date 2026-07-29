@@ -4,6 +4,8 @@ export interface Stroke {
   accent: boolean
   articulation: string
   surface: string
+  /** Index of the rudiment instance this stroke belongs to; notes are beamed by group. */
+  group: number
 }
 
 export interface Bar {

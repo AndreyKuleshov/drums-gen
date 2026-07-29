@@ -12,8 +12,8 @@ const phrase: Phrase = {
     {
       time_sig: { num: 2, den: 4 },
       strokes: [
-        { duration: '1/4', hand: 'R', accent: true, articulation: 'normal', surface: 'snare' },
-        { duration: '1/4', hand: 'L', accent: false, articulation: 'normal', surface: 'snare' },
+        { duration: '1/4', hand: 'R', accent: true, articulation: 'normal', surface: 'snare', group: 0 },
+        { duration: '1/4', hand: 'L', accent: false, articulation: 'normal', surface: 'snare', group: 1 },
       ],
     },
   ],

@@ -1,4 +1,5 @@
 from fractions import Fraction
+from itertools import pairwise
 
 import pytest
 from hypothesis import given, settings
@@ -112,3 +113,15 @@ def test_property_always_valid(num: int, num_bars: int, mode: AccentMode, seed: 
     for bar in phrase.bars:
         total = sum((s.duration for s in bar.strokes), Fraction(0))
         assert total == bar.time_sig.bar_length
+
+
+def test_strokes_are_tagged_with_contiguous_rudiment_groups():
+    phrase = generate(_req(num_bars=2))
+    groups = [s.group for b in phrase.bars for s in b.strokes]
+    # groups form contiguous blocks starting at 0, incrementing by 1
+    assert groups[0] == 0
+    for prev, cur in pairwise(groups):
+        assert cur in (prev, prev + 1)
+    # every stroke in a group shares the same group value (trivially true) and
+    # each distinct group has at least one stroke
+    assert max(groups) + 1 == len(set(groups))

@@ -30,6 +30,12 @@ class Stroke(BaseModel):
     accent: bool = False
     articulation: Articulation = Articulation.NORMAL
     surface: Surface = Surface.SNARE
+    group: int = 0
+    """Index of the rudiment instance this stroke belongs to, within the phrase.
+
+    Strokes sharing a group came from one placed rudiment template; the frontend
+    beams notes together by group. Defaults to 0 for standalone strokes.
+    """
 
 
 class Bar(BaseModel):

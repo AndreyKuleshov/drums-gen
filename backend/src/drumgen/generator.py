@@ -86,25 +86,39 @@ def generate(req: GenerateRequest) -> Phrase:
             )
         return strokes
 
-    def solve(pos: int, placed: list[Stroke]) -> list[Stroke] | None:
+    def solve(
+        pos: int, flat: list[Stroke], segments: list[list[Stroke]]
+    ) -> list[list[Stroke]] | None:
         if pos == total_cells:
-            return placed
+            return segments
         remaining_in_bar = cells_per_bar - (pos % cells_per_bar)
         for template in pool:
             if template.length_cells > remaining_in_bar:
                 continue
             new_strokes = build(template, pos)
-            if find_violations(placed[-2:] + new_strokes):
+            if find_violations(flat[-2:] + new_strokes):
                 continue
-            result = solve(pos + template.length_cells, [*placed, *new_strokes])
+            result = solve(
+                pos + template.length_cells,
+                [*flat, *new_strokes],
+                [*segments, new_strokes],
+            )
             if result is not None:
                 return result
         return None
 
-    flat = solve(0, [])
-    if flat is None:
+    segments = solve(0, [], [])
+    if segments is None:
         msg = "no valid tiling found for the given parameters"
         raise GenerationError(msg)
+
+    # Tag each stroke with its rudiment-instance index so the frontend can beam
+    # notes together by rudiment phrase.
+    flat = [
+        stroke.model_copy(update={"group": group_index})
+        for group_index, segment in enumerate(segments)
+        for stroke in segment
+    ]
 
     bars = [
         Bar(

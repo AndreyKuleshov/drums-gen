@@ -30,6 +30,8 @@ export interface NoteSpec {
   duration: string
   accent: boolean
   sticking: 'L' | 'R'
+  /** Rudiment-instance index carried from the backend; used to beam by phrase. */
+  group: number
 }
 
 export function barToNoteSpecs(bar: Bar): NoteSpec[] {
@@ -37,5 +39,42 @@ export function barToNoteSpecs(bar: Bar): NoteSpec[] {
     duration: vexDuration(s.duration),
     accent: s.accent,
     sticking: s.hand,
+    group: s.group,
   }))
+}
+
+/** VexFlow duration codes that can be joined by a beam (eighth and shorter). */
+const BEAMABLE = new Set(['8', '16', '32'])
+
+/**
+ * Compute which note indices should be beamed together: maximal runs of
+ * consecutive beamable notes that share the same rudiment group. Runs shorter
+ * than two notes are dropped (a beam needs at least two notes).
+ */
+export function beamGroups(specs: NoteSpec[]): number[][] {
+  const groups: number[][] = []
+  let current: number[] = []
+  let currentGroup: number | null = null
+
+  const flush = (): void => {
+    if (current.length >= 2) groups.push(current)
+    current = []
+    currentGroup = null
+  }
+
+  specs.forEach((spec, index) => {
+    if (!BEAMABLE.has(spec.duration)) {
+      flush()
+      return
+    }
+    if (currentGroup === spec.group) {
+      current.push(index)
+    } else {
+      flush()
+      current = [index]
+      currentGroup = spec.group
+    }
+  })
+  flush()
+  return groups
 }
