@@ -1,0 +1,7 @@
+{
+  "include": ["src", "tests"],
+  "extraPaths": ["src"],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12",
+  "reportMissingTypeStubs": false
+}

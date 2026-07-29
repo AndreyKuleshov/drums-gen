@@ -1,0 +1,40 @@
+[project]
+name = "drumgen"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+    "httpx>=0.27",
+    "ruff>=0.5",
+    "pyright>=1.1.360",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drumgen"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ANN", "PT"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN201", "ANN001"]
