@@ -49,11 +49,32 @@ onMounted(async () => {
 
       <p class="intro">
         The vocabulary the engine draws from, by difficulty. Each level also
-        includes everything easier. Legend:
-        <span class="legend"><span class="legend__acc">&gt;</span> accent</span>
-        <span class="legend"><span class="legend__grace">•</span> flam</span>
-        <span class="legend"><span class="legend__grace">••</span> drag</span>
+        includes everything easier.
       </p>
+
+      <ul class="legend">
+        <li class="legend__item">
+          <span class="cell cell--legend">
+            <span class="cell__acc" aria-hidden="true">&gt;</span>
+            <span class="cell__keys"><span class="key key--accent">R</span></span>
+          </span>
+          <span class="legend__text">Accent (louder)</span>
+        </li>
+        <li class="legend__item">
+          <span class="cell cell--legend">
+            <span class="cell__acc" aria-hidden="true" />
+            <span class="cell__keys"><span class="gkey">L</span><span class="key">R</span></span>
+          </span>
+          <span class="legend__text">Flam — 1 grace note</span>
+        </li>
+        <li class="legend__item">
+          <span class="cell cell--legend">
+            <span class="cell__acc" aria-hidden="true" />
+            <span class="cell__keys"><span class="gkey">L</span><span class="gkey">L</span><span class="key">R</span></span>
+          </span>
+          <span class="legend__text">Drag — 2 grace notes</span>
+        </li>
+      </ul>
 
       <p v-if="loading" class="state">Loading…</p>
       <p v-else-if="error" class="state state--error" role="alert">{{ error }}</p>
@@ -71,15 +92,19 @@ onMounted(async () => {
               <span v-if="r.filler" class="rud__tag">filler</span>
             </div>
             <ol class="sticking" :aria-label="`${r.name} sticking`">
-              <li
-                v-for="(hand, i) in r.sticking"
-                :key="i"
-                :class="['key', { 'key--accent': r.accents[i] }]"
-              >
-                <span class="key__acc" aria-hidden="true">{{ r.accents[i] ? '>' : '' }}</span>
-                <span class="key__letter">{{ hand }}</span>
-                <span v-if="r.grace[i]" class="key__grace" :aria-label="r.grace[i] === 1 ? 'flam' : 'drag'">
-                  {{ r.grace[i] === 1 ? '•' : '••' }}
+              <li v-for="(hand, i) in r.sticking" :key="i" class="cell">
+                <span class="cell__acc" aria-hidden="true">{{ r.accents[i] ? '>' : '' }}</span>
+                <span class="cell__keys">
+                  <span
+                    v-for="g in r.grace[i]"
+                    :key="g"
+                    class="gkey"
+                    aria-hidden="true"
+                  >{{ hand === 'R' ? 'L' : 'R' }}</span>
+                  <span :class="['key', { 'key--accent': r.accents[i] }]">{{ hand }}</span>
+                </span>
+                <span v-if="r.grace[i]" class="sr-only">
+                  {{ r.grace[i] === 1 ? 'flam' : 'drag' }}
                 </span>
               </li>
             </ol>
@@ -99,18 +124,27 @@ onMounted(async () => {
 }
 
 .legend {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  margin-left: 14px;
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--text-faint);
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge-soft);
+  background: linear-gradient(180deg, #171310, var(--chassis));
+  box-shadow: var(--inset);
 }
 
-.legend__acc,
-.legend__grace {
-  color: var(--amber-bright);
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend__text {
+  font-size: 0.82rem;
+  color: var(--text-dim);
 }
 
 .state {
@@ -197,52 +231,80 @@ onMounted(async () => {
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+}
+
+/* One stroke: an accent caret above, then grace mini-keys + the main key. */
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cell--legend {
+  display: inline-flex;
+}
+
+.cell__acc {
+  height: 15px;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--amber-bright);
+}
+
+.cell__keys {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .key {
-  position: relative;
   display: grid;
   place-items: center;
-  min-width: 30px;
-  height: 34px;
+  min-width: 32px;
+  height: 36px;
   border-radius: var(--r-sm);
   border: 1px solid var(--edge);
   background: #100e0c;
   box-shadow: var(--inset);
   font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: var(--text-dim);
+  font-size: 1rem;
+  color: var(--text);
 }
 
 .key--accent {
   color: #221204;
+  font-weight: 600;
   background: linear-gradient(180deg, var(--amber-bright), var(--amber));
   border-color: var(--amber-dim);
-  box-shadow: var(--shadow-1), 0 0 10px -4px var(--amber-glow);
+  box-shadow: var(--shadow-1), 0 0 12px -3px var(--amber-glow);
 }
 
-.key__acc {
-  position: absolute;
-  top: -14px;
-  height: 12px;
+/* Grace note = a small opposite-hand key just before the main key. */
+.gkey {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px dashed var(--edge);
+  background: transparent;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--amber-bright);
+  font-size: 0.7rem;
+  color: var(--text-faint);
 }
 
-.key__grace {
+.sr-only {
   position: absolute;
-  top: 1px;
-  left: 3px;
-  font-size: 0.5rem;
-  line-height: 1;
-  letter-spacing: -1px;
-  color: var(--amber-bright);
-}
-
-.key--accent .key__grace {
-  color: #4a2a08;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
