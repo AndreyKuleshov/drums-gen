@@ -13,9 +13,20 @@ const form = reactive({
   num_bars: 2,
   base: '1/16',
   triplet: false,
+  mixed: false,
   tempo_bpm: 100,
   accent_mode: 'rudiment',
 })
+
+// Triplet (a grid) and Mixed (varied binary values) are mutually exclusive.
+function toggleTriplet(): void {
+  form.triplet = !form.triplet
+  if (form.triplet) form.mixed = false
+}
+function toggleMixed(): void {
+  form.mixed = !form.mixed
+  if (form.mixed) form.triplet = false
+}
 
 const bases = [
   { value: '1/8', label: '1/8' },
@@ -47,6 +58,7 @@ async function submit(): Promise<void> {
         min_subdivision: subdivision,
         tempo_bpm: form.tempo_bpm,
         accent_mode: form.accent_mode,
+        mixed: form.mixed,
       }),
     })
     if (!resp.ok) {
@@ -103,10 +115,21 @@ async function submit(): Promise<void> {
             role="switch"
             :aria-checked="form.triplet"
             :class="['toggle', { 'is-on': form.triplet }]"
-            @click="form.triplet = !form.triplet"
+            @click="toggleTriplet"
           >
             <span class="toggle__led" aria-hidden="true" />
             Triplet
+          </button>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="form.mixed"
+            :class="['toggle', { 'is-on': form.mixed }]"
+            title="Mix note values (quarters, eighths, sixteenths) within a bar"
+            @click="toggleMixed"
+          >
+            <span class="toggle__led" aria-hidden="true" />
+            Mixed
           </button>
         </div>
       </div>

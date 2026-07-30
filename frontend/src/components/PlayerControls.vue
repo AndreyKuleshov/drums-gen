@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 
-import { playPhrase, stopPhrase } from '../lib/audio'
+import { playMetronome, playPhrase, stopPhrase } from '../lib/audio'
 import type { Phrase } from '../types'
 
 const props = defineProps<{ phrase: Phrase | null }>()
 const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
+const clicking = ref(false)
 const metronome = ref(false)
 
 const meta = computed(() => {
@@ -18,6 +19,7 @@ const meta = computed(() => {
 
 async function onPlay(): Promise<void> {
   if (props.phrase === null) return
+  clicking.value = false
   playing.value = true
   await playPhrase(props.phrase, {
     metronome: metronome.value,
@@ -28,9 +30,24 @@ async function onPlay(): Promise<void> {
   })
 }
 
+async function onClickOnly(): Promise<void> {
+  if (clicking.value) {
+    onStop()
+    return
+  }
+  playing.value = false
+  emit('step', null)
+  clicking.value = true
+  const num = props.phrase?.time_sig.num ?? 4
+  const den = props.phrase?.time_sig.den ?? 4
+  const tempoBpm = props.phrase?.tempo_bpm ?? 100
+  await playMetronome({ tempoBpm, num, den })
+}
+
 function onStop(): void {
   stopPhrase()
   playing.value = false
+  clicking.value = false
   emit('step', null)
 }
 
@@ -53,11 +70,33 @@ onBeforeUnmount(() => {
           <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
         </svg>
       </button>
-      <button class="stop" :disabled="phrase === null" aria-label="Stop" @click="onStop">
+      <button class="stop" :disabled="!playing && !clicking" aria-label="Stop" @click="onStop">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
         </svg>
       </button>
+
+      <button
+        class="click"
+        type="button"
+        :class="{ 'is-on': clicking }"
+        :aria-pressed="clicking"
+        aria-label="Metronome only"
+        title="Play metronome only"
+        @click="onClickOnly"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path
+            d="M9 3h6l3 16H6zM12 6.5v8.5M12 15l4-3"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+
       <button
         class="metro"
         type="button"
@@ -67,12 +106,16 @@ onBeforeUnmount(() => {
         @click="metronome = !metronome"
       >
         <span class="metro__led" aria-hidden="true" />
-        Metronome
+        With click
       </button>
 
       <span class="status">
-        <span class="status__led" :class="{ 'status__led--on': playing }" aria-hidden="true" />
-        {{ playing ? 'Playing' : phrase ? 'Ready' : 'No pattern' }}
+        <span
+          class="status__led"
+          :class="{ 'status__led--on': playing || clicking }"
+          aria-hidden="true"
+        />
+        {{ clicking ? 'Click' : playing ? 'Playing' : phrase ? 'Ready' : 'No pattern' }}
       </span>
     </div>
 
@@ -153,6 +196,35 @@ onBeforeUnmount(() => {
 
 .stop:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.click {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--edge);
+  color: var(--text-dim);
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  box-shadow: var(--shadow-1);
+  transition:
+    color 0.15s ease,
+    box-shadow 0.2s ease,
+    transform 0.12s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.click:hover {
+  color: var(--text);
+}
+
+.click:active {
+  transform: translateY(1px);
+}
+
+.click.is-on {
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), 0 0 16px -4px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
 }
 
 .play:disabled,

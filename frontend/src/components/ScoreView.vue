@@ -136,7 +136,9 @@ watch(
     litEl = undefined
     if (phrase !== null) render(phrase)
   },
-  { immediate: true },
+  // 'post' so the container is mounted in the DOM before the first render —
+  // otherwise the first generated phrase renders to nothing.
+  { immediate: true, flush: 'post' },
 )
 
 watch(

@@ -21,17 +21,14 @@ class GenerateRequest(BaseModel):
     tempo_bpm: int = Field(ge=1)
     accent_mode: AccentMode
     seed: int | None = None
+    mixed: bool = False
+    """When true, rudiments are placed at varied note values (mix of e.g. quarters,
+    eighths, sixteenths) instead of a single uniform subdivision."""
 
 
-def _metric_strong_cells(time_sig: TimeSignature, subdivision: Fraction) -> set[int]:
-    beat = time_sig.beat_length
-    cells_per_bar = time_sig.bar_length / subdivision
-    n = cells_per_bar.numerator
-    strong: set[int] = set()
-    for i in range(n):
-        if ((subdivision * i) / beat).denominator == 1:
-            strong.add(i)
-    return strong
+def _is_metric_strong(pos: Fraction, beat: Fraction) -> bool:
+    """True when a stroke starting at `pos` (from bar start) lands on a beat."""
+    return (pos / beat).denominator == 1
 
 
 def _resolve_accent(template_accent: bool, is_strong: bool, mode: AccentMode) -> bool:
@@ -57,63 +54,115 @@ def _orientations(templates: list[RudimentTemplate]) -> list[RudimentTemplate]:
     return out
 
 
+def _note_values(subdivision: Fraction, bar_length: Fraction, mixed: bool) -> list[Fraction]:
+    """Allowed per-stroke note values.
+
+    Uniform mode: just the base subdivision. Mixed mode: the base plus its
+    power-of-two multiples up to a quarter note (or the bar), so a bar can hold
+    e.g. quarters, eighths and sixteenths together. All values are multiples of
+    the base, so any partial fill stays an exact multiple and the bar can always
+    be completed with base-value filler strokes.
+    """
+    if not mixed:
+        return [subdivision]
+    cap = min(Fraction(1, 4), bar_length)
+    values: list[Fraction] = []
+    value = subdivision
+    while value <= cap:
+        values.append(value)
+        value *= 2
+    return values or [subdivision]
+
+
 def generate(req: GenerateRequest) -> Phrase:
     subdivision = req.min_subdivision
     if subdivision <= 0:
         msg = f"min_subdivision must be positive, got {subdivision}"
         raise GenerationError(msg)
-    cells_ratio = req.time_sig.bar_length / subdivision
+    bar_length = req.time_sig.bar_length
+    cells_ratio = bar_length / subdivision
     if cells_ratio.denominator != 1 or cells_ratio.numerator < 1:
-        msg = f"bar {req.time_sig.bar_length} not divisible by subdivision {subdivision}"
-        raise GenerationError(msg)
-    if req.num_bars < 1:
-        msg = "num_bars must be >= 1"
+        msg = f"bar {bar_length} not divisible by subdivision {subdivision}"
         raise GenerationError(msg)
 
-    cells_per_bar = cells_ratio.numerator
-    total_cells = cells_per_bar * req.num_bars
+    total_cells = cells_ratio.numerator * req.num_bars
     max_cells = 1024
     if total_cells > max_cells:
         msg = f"pattern too large: {total_cells} cells exceeds limit {max_cells}"
         raise GenerationError(msg)
-    strong = _metric_strong_cells(req.time_sig, subdivision)
+
+    beat = req.time_sig.beat_length
+    values = _note_values(subdivision, bar_length, req.mixed)
     rng = random.Random(req.seed)
     phrase_pool = _orientations([t for t in MVP_CATALOG if t.id not in _FILLER_IDS])
     filler_pool = _orientations([t for t in MVP_CATALOG if t.id in _FILLER_IDS])
 
-    def build(template: RudimentTemplate, pos: int) -> list[Stroke]:
+    def build(template: RudimentTemplate, value: Fraction, start: Fraction) -> list[Stroke]:
         strokes: list[Stroke] = []
         for k, elem in enumerate(template.elements):
-            is_strong = (pos + k) % cells_per_bar in strong
+            pos = start + k * value
+            is_strong = _is_metric_strong(pos, beat)
             strokes.append(
                 Stroke(
-                    duration=subdivision,
+                    duration=value,
                     hand=elem.hand,
                     accent=_resolve_accent(elem.accent, is_strong, req.accent_mode),
                 )
             )
         return strokes
 
+    # Fill unit: the whole bar (uniform) or a single beat (mixed, so each beat can
+    # take a different note value). Each unit is filled with rudiments at one value.
+    unit = beat if req.mixed else bar_length
+    units_per_bar = int(bar_length / unit)
+
+    def feasible_values(unit_len: Fraction) -> list[Fraction]:
+        vals = [v for v in values if (unit_len / v).denominator == 1]
+        return vals or [subdivision]
+
     def solve(
-        pos: int, flat: list[Stroke], segments: list[list[Stroke]]
+        bar_index: int,
+        unit_index: int,
+        pos_in_unit: Fraction,
+        value: Fraction | None,
+        flat: list[Stroke],
+        segments: list[list[Stroke]],
     ) -> list[list[Stroke]] | None:
-        if pos == total_cells:
+        if bar_index == req.num_bars:
             return segments
-        remaining_in_bar = cells_per_bar - (pos % cells_per_bar)
-        # Try real rudiments first (shuffled per position for variety), falling
-        # back to single/double fillers only when nothing else fits.
+        if pos_in_unit == unit:
+            next_unit = unit_index + 1
+            if next_unit == units_per_bar:
+                return solve(bar_index + 1, 0, Fraction(0), None, flat, segments)
+            return solve(bar_index, next_unit, Fraction(0), None, flat, segments)
+        if value is None:
+            candidates = feasible_values(unit)
+            candidates = candidates[:]
+            rng.shuffle(candidates)
+            for chosen in candidates:
+                result = solve(bar_index, unit_index, pos_in_unit, chosen, flat, segments)
+                if result is not None:
+                    return result
+            return None
+
+        remaining = unit - pos_in_unit
+        start = unit_index * unit + pos_in_unit
         phrase_shuffled = phrase_pool[:]
         rng.shuffle(phrase_shuffled)
         filler_shuffled = filler_pool[:]
         rng.shuffle(filler_shuffled)
         for template in (*phrase_shuffled, *filler_shuffled):
-            if template.length_cells > remaining_in_bar:
+            span = template.length_cells * value
+            if span > remaining:
                 continue
-            new_strokes = build(template, pos)
+            new_strokes = build(template, value, start)
             if find_violations(flat[-2:] + new_strokes):
                 continue
             result = solve(
-                pos + template.length_cells,
+                bar_index,
+                unit_index,
+                pos_in_unit + span,
+                value,
                 [*flat, *new_strokes],
                 [*segments, new_strokes],
             )
@@ -121,26 +170,26 @@ def generate(req: GenerateRequest) -> Phrase:
                 return result
         return None
 
-    segments = solve(0, [], [])
+    segments = solve(0, 0, Fraction(0), None, [], [])
     if segments is None:
         msg = "no valid tiling found for the given parameters"
         raise GenerationError(msg)
 
-    # Tag each stroke with its rudiment-instance index so the frontend can beam
-    # notes together by rudiment phrase.
-    flat = [
-        stroke.model_copy(update={"group": group_index})
-        for group_index, segment in enumerate(segments)
-        for stroke in segment
-    ]
+    # Tag strokes with their rudiment-instance index (for beaming) and split the
+    # placement segments back into bars by accumulating durations.
+    bar_strokes: list[list[Stroke]] = [[]]
+    filled = Fraction(0)
+    for group_index, segment in enumerate(segments):
+        for stroke in segment:
+            bar_strokes[-1].append(stroke.model_copy(update={"group": group_index}))
+        filled += sum((s.duration for s in segment), Fraction(0))
+        if filled == bar_length:
+            filled = Fraction(0)
+            bar_strokes.append([])
+    if not bar_strokes[-1]:
+        bar_strokes.pop()
 
-    bars = [
-        Bar(
-            time_sig=req.time_sig,
-            strokes=flat[i * cells_per_bar : (i + 1) * cells_per_bar],
-        )
-        for i in range(req.num_bars)
-    ]
+    bars = [Bar(time_sig=req.time_sig, strokes=strokes) for strokes in bar_strokes]
     return Phrase(
         time_sig=req.time_sig,
         tempo_bpm=req.tempo_bpm,

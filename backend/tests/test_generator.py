@@ -10,7 +10,7 @@ from drumgen.domain.models import TimeSignature
 from drumgen.generator import (
     GenerateRequest,
     GenerationError,
-    _metric_strong_cells,  # pyright: ignore[reportPrivateUsage]
+    _is_metric_strong,  # pyright: ignore[reportPrivateUsage]
     generate,
 )
 from drumgen.rules import find_violations
@@ -70,12 +70,18 @@ def test_generate_rejects_oversized_cell_count():
         )
 
 
-def test_metric_strong_cells_simple_meter():
-    assert _metric_strong_cells(TimeSignature(num=4, den=4), Fraction(1, 8)) == {0, 2, 4, 6}
+def test_metric_strong_simple_meter():
+    beat = Fraction(1, 4)  # quarter-note beat in 4/4
+    assert _is_metric_strong(Fraction(0), beat) is True
+    assert _is_metric_strong(Fraction(1, 4), beat) is True
+    assert _is_metric_strong(Fraction(1, 8), beat) is False
 
 
-def test_metric_strong_cells_compound_meter():
-    assert _metric_strong_cells(TimeSignature(num=6, den=8), Fraction(1, 8)) == {0, 3}
+def test_metric_strong_compound_meter():
+    beat = Fraction(3, 8)  # dotted-quarter beat in 6/8
+    assert _is_metric_strong(Fraction(0), beat) is True
+    assert _is_metric_strong(Fraction(3, 8), beat) is True
+    assert _is_metric_strong(Fraction(1, 8), beat) is False
 
 
 def test_seed_is_reproducible():
@@ -125,3 +131,49 @@ def test_strokes_are_tagged_with_contiguous_rudiment_groups():
     # every stroke in a group shares the same group value (trivially true) and
     # each distinct group has at least one stroke
     assert max(groups) + 1 == len(set(groups))
+
+
+def test_mixed_mode_varies_note_durations():
+    # Uniform mode: all durations equal the subdivision.
+    uniform = generate(_req(num_bars=2))
+    durs_uniform = {s.duration for b in uniform.bars for s in b.strokes}
+    assert durs_uniform == {Fraction(1, 16)}
+
+    # Mixed mode can mix note values: across seeds at least one phrase uses more
+    # than one distinct duration, and every phrase stays valid and exactly filled.
+    saw_mixed = False
+    for seed in range(12):
+        mixed = generate(_req(num_bars=2, mixed=True, seed=seed))
+        strokes = [s for b in mixed.bars for s in b.strokes]
+        assert find_violations(strokes) == []
+        for bar in mixed.bars:
+            total = sum((s.duration for s in bar.strokes), Fraction(0))
+            assert total == bar.time_sig.bar_length
+        if len({s.duration for s in strokes}) > 1:
+            saw_mixed = True
+    assert saw_mixed
+
+
+@settings(max_examples=20, deadline=None)
+@given(
+    num=st.sampled_from([2, 3, 4]),
+    num_bars=st.integers(min_value=1, max_value=3),
+    mode=st.sampled_from(list(AccentMode)),
+    seed=st.integers(min_value=0, max_value=1000),
+)
+def test_property_mixed_always_valid(num: int, num_bars: int, mode: AccentMode, seed: int):
+    phrase = generate(
+        _req(
+            time_sig=TimeSignature(num=num, den=4),
+            num_bars=num_bars,
+            min_subdivision=Fraction(1, 16),
+            accent_mode=mode,
+            mixed=True,
+            seed=seed,
+        )
+    )
+    strokes = [s for b in phrase.bars for s in b.strokes]
+    assert find_violations(strokes) == []
+    for bar in phrase.bars:
+        total = sum((s.duration for s in bar.strokes), Fraction(0))
+        assert total == bar.time_sig.bar_length

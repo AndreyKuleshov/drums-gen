@@ -58,29 +58,69 @@ export function metronomeTimes(phrase: Phrase): { timeSec: number; down: boolean
   return out
 }
 
-let synth: Tone.NoiseSynth | null = null
+// Snare voice, split so an accent is unmistakably louder, brighter and fuller
+// than a ghost note. (Swap these for real samples later via a Tone.Sampler.)
+let accentNoise: Tone.NoiseSynth | null = null
+let ghostNoise: Tone.NoiseSynth | null = null
+let body: Tone.MembraneSynth | null = null
 let click: Tone.MembraneSynth | null = null
 
-function getSynth(): Tone.NoiseSynth {
-  if (synth === null) {
-    synth = new Tone.NoiseSynth({
+function getAccentNoise(): Tone.NoiseSynth {
+  if (accentNoise === null) {
+    accentNoise = new Tone.NoiseSynth({
       noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.08, sustain: 0 },
+      envelope: { attack: 0.001, decay: 0.14, sustain: 0 },
     })
-    const filter = new Tone.Filter(3000, 'bandpass').toDestination()
-    synth.connect(filter)
+    const filter = new Tone.Filter(4200, 'bandpass').toDestination()
+    filter.Q.value = 0.7
+    accentNoise.connect(filter)
+    accentNoise.volume.value = 0
   }
-  return synth
+  return accentNoise
+}
+
+function getGhostNoise(): Tone.NoiseSynth {
+  if (ghostNoise === null) {
+    ghostNoise = new Tone.NoiseSynth({
+      noise: { type: 'pink' },
+      envelope: { attack: 0.001, decay: 0.04, sustain: 0 },
+    })
+    const filter = new Tone.Filter(1500, 'lowpass').toDestination()
+    ghostNoise.connect(filter)
+    ghostNoise.volume.value = -16
+  }
+  return ghostNoise
+}
+
+function getBody(): Tone.MembraneSynth {
+  if (body === null) {
+    body = new Tone.MembraneSynth({
+      pitchDecay: 0.03,
+      octaves: 3,
+      envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
+    }).toDestination()
+    body.volume.value = -8
+  }
+  return body
+}
+
+function hit(time: number, accent: boolean): void {
+  if (accent) {
+    getAccentNoise().triggerAttackRelease('16n', time, 1)
+    getBody().triggerAttackRelease('D2', '16n', time, 0.9)
+  } else {
+    getGhostNoise().triggerAttackRelease('32n', time, 0.9)
+  }
 }
 
 function getClick(): Tone.MembraneSynth {
   if (click === null) {
     click = new Tone.MembraneSynth({
-      pitchDecay: 0.008,
-      octaves: 2,
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
+      pitchDecay: 0.006,
+      octaves: 4,
+      envelope: { attack: 0.001, decay: 0.04, sustain: 0 },
     }).toDestination()
-    click.volume.value = -6
+    click.volume.value = -4
   }
   return click
 }
@@ -99,11 +139,10 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   const transport = Tone.getTransport()
   stopPhrase()
   const draw = Tone.getDraw()
-  const s = getSynth()
 
   scheduleTimes(phrase).forEach((event, index) => {
     transport.schedule((time) => {
-      s.triggerAttackRelease('16n', time, event.velocity)
+      hit(time, event.velocity >= 1)
       draw.schedule(() => opts.onStep?.(index), time)
     }, event.timeSec)
   })
@@ -132,4 +171,30 @@ export function stopPhrase(): void {
   const transport = Tone.getTransport()
   transport.stop()
   transport.cancel(0)
+  transport.loop = false
+}
+
+/** Loop a metronome click track on its own (no pattern), one bar of the given meter. */
+export async function playMetronome(opts: {
+  tempoBpm: number
+  num: number
+  den: number
+}): Promise<void> {
+  await Tone.start()
+  const transport = Tone.getTransport()
+  stopPhrase()
+  const c = getClick()
+  const wholeNoteSec = 240 / opts.tempoBpm
+  const barWhole = opts.num / opts.den
+  const beat = beatWholeNotes(opts.num, opts.den)
+  for (let t = 0; t + 1e-9 < barWhole; t += beat) {
+    const down = t < 1e-9
+    transport.schedule((time) => {
+      c.triggerAttackRelease(down ? 'C3' : 'G2', '32n', time, down ? 1 : 0.5)
+    }, t * wholeNoteSec)
+  }
+  transport.loop = true
+  transport.loopStart = 0
+  transport.loopEnd = barWhole * wholeNoteSec
+  transport.start()
 }
