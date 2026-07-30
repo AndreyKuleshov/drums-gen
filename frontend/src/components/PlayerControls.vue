@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
-import { parseFraction, playMetronome, playPhrase, setLoop, setTempo, stopPhrase } from '../lib/audio'
+import {
+  parseFraction,
+  playMetronome,
+  playPhrase,
+  setLoop,
+  setMetronomeVolume,
+  setTempo,
+  stopPhrase,
+} from '../lib/audio'
 import type { Phrase } from '../types'
 
 const props = defineProps<{ phrase: Phrase | null; tempo: number }>()
@@ -28,6 +36,10 @@ const metroTripletOn = computed(() => metroTriplet.value && canTriplet.value)
 const metroSubWhole = computed(() =>
   parseFraction(metroTripletOn.value ? TRIPLET_OF[metroBase.value] : metroBase.value),
 )
+
+// Metronome volume (0..1), applied live to standalone + overlay clicks.
+const metroVolume = ref(0.75)
+watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 
 const meta = computed(() => {
   if (props.phrase === null) return null
@@ -204,6 +216,28 @@ onBeforeUnmount(() => {
             T
           </button>
         </div>
+
+        <label class="volume" title="Metronome volume">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M4 9v6h4l5 4V5L8 9zM16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <input
+            v-model.number="metroVolume"
+            class="volume__range"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            aria-label="Metronome volume"
+          />
+        </label>
       </div>
     </div>
 
@@ -451,6 +485,42 @@ onBeforeUnmount(() => {
   border-color: var(--edge);
   color: var(--amber-bright);
   box-shadow: var(--shadow-1);
+}
+
+.volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+}
+
+.volume__range {
+  width: 84px;
+  height: 4px;
+  border-radius: 4px;
+  background: #100e0c;
+  box-shadow: var(--inset);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.volume__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+  border: 1px solid var(--amber-dim);
+  box-shadow: 0 0 8px -2px var(--amber-glow);
+}
+
+.volume__range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--amber-dim);
+  border-radius: 50%;
+  background: var(--amber);
 }
 
 .readout {

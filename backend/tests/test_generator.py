@@ -6,7 +6,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from drumgen.domain.enums import AccentMode
-from drumgen.domain.models import TimeSignature
+from drumgen.domain.models import Stroke, TimeSignature
 from drumgen.generator import (
     GenerateRequest,
     GenerationError,
@@ -205,3 +205,20 @@ def test_authentic_off_keeps_uniform_durations():
     # Weights are ignored unless authentic is on.
     p = generate(_req(num_bars=2))
     assert {s.duration for b in p.bars for s in b.strokes} == {Fraction(1, 16)}
+
+
+def _loop_safe(strokes: list[Stroke]) -> bool:
+    # Rules must hold across the wrap-around seam (last strokes -> first strokes).
+    return not find_violations(strokes[-2:] + strokes[:2])
+
+
+def test_generated_phrases_are_loop_safe():
+    for seed in range(30):
+        for num in (2, 3, 4):
+            for feel in ({}, {"mixed": True}, {"authentic": True}):
+                p = generate(
+                    _req(time_sig=TimeSignature(num=num, den=4), num_bars=2, seed=seed, **feel)
+                )
+                strokes = [s for b in p.bars for s in b.strokes]
+                assert find_violations(strokes) == []
+                assert _loop_safe(strokes), (seed, num, feel)

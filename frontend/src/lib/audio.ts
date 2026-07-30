@@ -138,6 +138,8 @@ function hit(time: number, accent: boolean): void {
   })
 }
 
+let clickVolumeDb = -10
+
 function getClick(): Tone.PolySynth<Tone.Synth> {
   if (click === null) {
     click = new Tone.PolySynth(Tone.Synth).toDestination()
@@ -145,9 +147,15 @@ function getClick(): Tone.PolySynth<Tone.Synth> {
       oscillator: { type: 'square' },
       envelope: { attack: 0.0005, decay: 0.03, sustain: 0, release: 0.01 },
     })
-    click.volume.value = -10
+    click.volume.value = clickVolumeDb
   }
   return click
+}
+
+/** Set metronome loudness live (level 0..1). Applies to standalone and overlay. */
+export function setMetronomeVolume(level: number): void {
+  clickVolumeDb = level <= 0.001 ? -Infinity : -40 + level * 40
+  if (click !== null) click.volume.value = clickVolumeDb
 }
 
 function tick(time: number, level: ClickLevel): void {

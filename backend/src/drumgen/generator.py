@@ -138,6 +138,10 @@ def generate(req: GenerateRequest) -> Phrase:
         segments: list[list[Stroke]],
     ) -> list[list[Stroke]] | None:
         if bar_index == req.num_bars:
+            # The phrase is meant to loop, so the wrap-around seam (last strokes
+            # -> first strokes) must also obey the rules.
+            if len(flat) >= 2 and find_violations(flat[-2:] + flat[:2]):
+                return None
             return segments
         if pos_in_unit == unit:
             next_unit = unit_index + 1
