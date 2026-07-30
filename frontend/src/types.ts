@@ -15,6 +15,17 @@ export interface Bar {
   strokes: Stroke[]
 }
 
+export interface Rudiment {
+  id: string
+  name: string
+  difficulty: 'beginner' | 'mid' | 'pro'
+  length: number
+  filler: boolean
+  sticking: ('L' | 'R')[]
+  accents: boolean[]
+  grace: number[]
+}
+
 export interface PatternConfig {
   meter: string
   grid: string

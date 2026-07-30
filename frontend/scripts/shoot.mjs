@@ -95,9 +95,18 @@ try {
   const transport = page.locator('.transport').first()
   await transport.screenshot({ path: `${OUT}/06-transport.png` })
 
+  // Rudiments reference page (desktop).
+  await page.goto(`http://localhost:${FRONT}/rudiments`, { waitUntil: 'networkidle' })
+  await page.waitForSelector('.rud', { timeout: 8000 })
+  await page.screenshot({ path: `${OUT}/09-rudiments.png`, fullPage: true })
+
   // Mobile width.
   await page.setViewportSize({ width: 390, height: 850 })
   await page.waitForTimeout(300)
+  await page.screenshot({ path: `${OUT}/10-rudiments-mobile.png`, fullPage: true })
+  await page.goto(`http://localhost:${FRONT}/`, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await page.waitForTimeout(700)
   await page.screenshot({ path: `${OUT}/05-mobile.png`, fullPage: true })
 
   await browser.close()

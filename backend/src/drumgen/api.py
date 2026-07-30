@@ -27,6 +27,22 @@ def post_generate(req: GenerateRequest) -> Phrase:
     return generate(req)
 
 
+_FILLER_RUDIMENTS = frozenset({"single", "double"})
+
+
 @app.get("/rudiments")
 def get_rudiments() -> list[dict[str, object]]:
-    return [{"id": t.id, "name": t.name, "length_cells": t.length_cells} for t in MVP_CATALOG]
+    """The rudiment catalog used to build patterns, with sticking and ornaments."""
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "difficulty": t.difficulty.value,
+            "length": t.length_cells,
+            "filler": t.id in _FILLER_RUDIMENTS,
+            "sticking": [e.hand.value for e in t.elements],
+            "accents": [e.accent for e in t.elements],
+            "grace": [e.grace for e in t.elements],
+        }
+        for t in MVP_CATALOG
+    ]
