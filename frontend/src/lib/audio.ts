@@ -67,7 +67,18 @@ export function metronomeTimes(
 let accentNoise: Tone.NoiseSynth | null = null
 let normalNoise: Tone.NoiseSynth | null = null
 let body: Tone.MembraneSynth | null = null
-let click: Tone.Synth | null = null
+let click: Tone.PolySynth<Tone.Synth> | null = null
+
+/** Trigger a voice, ignoring Tone's "start time must be strictly greater"
+ * error that a monophonic voice throws if the transport re-fires an event at
+ * the same instant (e.g. on a live tempo change during a loop). */
+function safeTrigger(fn: () => void): void {
+  try {
+    fn()
+  } catch {
+    // benign double-trigger at an identical time; skip this hit.
+  }
+}
 
 // Metronome beep pitches (Hz): a high blip on the downbeat, lower on other beats.
 const CLICK_DOWN = 2000
@@ -114,27 +125,32 @@ function getBody(): Tone.MembraneSynth {
 }
 
 function hit(time: number, accent: boolean): void {
-  if (accent) {
-    getAccentNoise().triggerAttackRelease('16n', time, 1)
-    getBody().triggerAttackRelease('D2', '16n', time, 0.9)
-  } else {
-    getNormalNoise().triggerAttackRelease('16n', time, 0.85)
-  }
+  safeTrigger(() => {
+    if (accent) {
+      getAccentNoise().triggerAttackRelease('16n', time, 1)
+      getBody().triggerAttackRelease('D2', '16n', time, 0.9)
+    } else {
+      getNormalNoise().triggerAttackRelease('16n', time, 0.85)
+    }
+  })
 }
 
-function getClick(): Tone.Synth {
+function getClick(): Tone.PolySynth<Tone.Synth> {
   if (click === null) {
-    click = new Tone.Synth({
+    click = new Tone.PolySynth(Tone.Synth).toDestination()
+    click.set({
       oscillator: { type: 'square' },
       envelope: { attack: 0.0005, decay: 0.03, sustain: 0, release: 0.01 },
-    }).toDestination()
+    })
     click.volume.value = -10
   }
   return click
 }
 
 function tick(time: number, down: boolean): void {
-  getClick().triggerAttackRelease(down ? CLICK_DOWN : CLICK_UP, '64n', time, down ? 1 : 0.6)
+  safeTrigger(() =>
+    getClick().triggerAttackRelease(down ? CLICK_DOWN : CLICK_UP, '64n', time, down ? 1 : 0.6),
+  )
 }
 
 export interface PlayOptions {
