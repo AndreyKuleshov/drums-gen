@@ -152,9 +152,10 @@ function getClick(): Tone.PolySynth<Tone.Synth> {
   return click
 }
 
-/** Set metronome loudness live (level 0..1). Applies to standalone and overlay. */
+/** Set metronome loudness live (level 0..1). Applies to standalone and overlay.
+ * Curve centred so mid-slider (0.5) is 0 dB with headroom above (up to +12 dB). */
 export function setMetronomeVolume(level: number): void {
-  clickVolumeDb = level <= 0.001 ? -Infinity : -40 + level * 40
+  clickVolumeDb = level <= 0.001 ? -Infinity : 24 * level - 12
   if (click !== null) click.volume.value = clickVolumeDb
 }
 
