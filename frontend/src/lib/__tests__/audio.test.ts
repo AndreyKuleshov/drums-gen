@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Phrase } from '../../types'
-import { parseFraction, scheduleTimes } from '../audio'
+import { metronomeGrid, parseFraction, scheduleTimes } from '../audio'
 
 const phrase: Phrase = {
   time_sig: { num: 2, den: 4 },
@@ -32,5 +32,27 @@ describe('scheduleTimes', () => {
     expect(events.map((e) => e.timeSec)).toEqual([0, 1])
     expect(events.map((e) => e.velocity)).toEqual([1.0, 0.6])
     expect(events.map((e) => e.hand)).toEqual(['R', 'L'])
+  })
+})
+
+describe('metronomeGrid', () => {
+  it('one click per beat by default (4/4)', () => {
+    const g = metronomeGrid(4, 4)
+    expect(g.map((x) => x.level)).toEqual(['down', 'beat', 'beat', 'beat'])
+  })
+
+  it('subdivides into eighths with soft off-beats, accents on quarters', () => {
+    const g = metronomeGrid(4, 4, 1 / 8)
+    expect(g.map((x) => x.level)).toEqual([
+      'down', 'sub', 'beat', 'sub', 'beat', 'sub', 'beat', 'sub',
+    ])
+  })
+
+  it('triplet eighths give two soft clicks between each beat', () => {
+    const g = metronomeGrid(4, 4, 1 / 12)
+    expect(g.length).toBe(12)
+    expect(g.filter((x) => x.level !== 'sub').map((x) => x.level)).toEqual([
+      'down', 'beat', 'beat', 'beat',
+    ])
   })
 })

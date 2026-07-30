@@ -5,14 +5,36 @@ __pycache__/
 backend/.venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
 # Node / frontend
 node_modules/
 frontend/dist/
 *.tsbuildinfo
 
+# Playwright (browser test tooling)
+test-results/
+playwright-report/
+frontend/playwright/.cache/
+
+# Docs (design specs / plans kept local, not tracked)
+docs/
+
 # SDD scratch (progress ledger + subagent reports)
 .superpowers/
 
-# Misc
+# Editors / IDEs
+.vscode/
+.idea/
+*.iml
+.fleet/
+.zed/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db

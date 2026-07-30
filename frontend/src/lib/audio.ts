@@ -43,19 +43,20 @@ function beatWholeNotes(num: number, den: number): number {
   return (compound ? 3 : 1) / den
 }
 
-/** Absolute times (sec) of every metronome beat, flagged as downbeat or not. */
+/** Absolute times (sec) + accent level of every metronome click across the phrase. */
 export function metronomeTimes(
   phrase: Phrase,
   tempoBpm: number = phrase.tempo_bpm,
-): { timeSec: number; down: boolean }[] {
+  subWhole?: number,
+): { timeSec: number; level: 'down' | 'beat' | 'sub' }[] {
   const wholeNoteSec = 240 / tempoBpm
   const { num, den } = phrase.time_sig
   const barWhole = num / den
-  const beat = beatWholeNotes(num, den)
-  const out: { timeSec: number; down: boolean }[] = []
+  const grid = metronomeGrid(num, den, subWhole)
+  const out: { timeSec: number; level: 'down' | 'beat' | 'sub' }[] = []
   for (let bar = 0; bar < phrase.bars.length; bar++) {
-    for (let t = 0; t + 1e-9 < barWhole; t += beat) {
-      out.push({ timeSec: (bar * barWhole + t) * wholeNoteSec, down: t < 1e-9 })
+    for (const g of grid) {
+      out.push({ timeSec: (bar * barWhole + g.offsetWhole) * wholeNoteSec, level: g.level })
     }
   }
   return out
@@ -80,9 +81,11 @@ function safeTrigger(fn: () => void): void {
   }
 }
 
-// Metronome beep pitches (Hz): a high blip on the downbeat, lower on other beats.
-const CLICK_DOWN = 2000
-const CLICK_UP = 1200
+// Metronome beep levels (Hz): bar downbeat highest, quarter beats accented,
+// in-between subdivisions soft.
+type ClickLevel = 'down' | 'beat' | 'sub'
+const CLICK_HZ: Record<ClickLevel, number> = { down: 2000, beat: 1400, sub: 950 }
+const CLICK_VEL: Record<ClickLevel, number> = { down: 1, beat: 0.7, sub: 0.32 }
 
 function getAccentNoise(): Tone.NoiseSynth {
   if (accentNoise === null) {
@@ -147,10 +150,30 @@ function getClick(): Tone.PolySynth<Tone.Synth> {
   return click
 }
 
-function tick(time: number, down: boolean): void {
+function tick(time: number, level: ClickLevel): void {
   safeTrigger(() =>
-    getClick().triggerAttackRelease(down ? CLICK_DOWN : CLICK_UP, '64n', time, down ? 1 : 0.6),
+    getClick().triggerAttackRelease(CLICK_HZ[level], '64n', time, CLICK_VEL[level]),
   )
+}
+
+/** Click positions and accent levels for one meter, at a given click subdivision.
+ * `subWhole` is the click spacing in whole notes; omit for one click per beat. */
+export function metronomeGrid(
+  num: number,
+  den: number,
+  subWhole?: number,
+): { offsetWhole: number; level: ClickLevel }[] {
+  const barWhole = num / den
+  const beat = beatWholeNotes(num, den)
+  const step = subWhole ?? beat
+  const stepsPerBar = Math.round(barWhole / step)
+  const beatSteps = Math.max(1, Math.round(beat / step))
+  const out: { offsetWhole: number; level: ClickLevel }[] = []
+  for (let i = 0; i < stepsPerBar; i++) {
+    const level: ClickLevel = i === 0 ? 'down' : i % beatSteps === 0 ? 'beat' : 'sub'
+    out.push({ offsetWhole: i * step, level })
+  }
+  return out
 }
 
 export interface PlayOptions {
@@ -160,6 +183,8 @@ export interface PlayOptions {
   onEnd?: () => void
   /** Play a metronome click track alongside the pattern. */
   metronome?: boolean
+  /** Metronome click spacing (whole notes); omit for one click per beat. */
+  metroSubWhole?: number
   /** Repeat the pattern continuously until stopped. */
   loop?: boolean
   /** Playback tempo; overrides the phrase's baked-in tempo so it can change live. */
@@ -187,8 +212,8 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   })
 
   if (opts.metronome) {
-    for (const beat of metronomeTimes(phrase, tempo)) {
-      transport.schedule((time) => tick(time, beat.down), beat.timeSec)
+    for (const beat of metronomeTimes(phrase, tempo, opts.metroSubWhole)) {
+      transport.schedule((time) => tick(time, beat.level), beat.timeSec)
     }
   }
 
@@ -233,6 +258,7 @@ export async function playMetronome(opts: {
   tempoBpm: number
   num: number
   den: number
+  subWhole?: number
 }): Promise<void> {
   await Tone.start()
   const transport = Tone.getTransport()
@@ -240,10 +266,8 @@ export async function playMetronome(opts: {
   transport.bpm.value = opts.tempoBpm
   const wholeNoteSec = 240 / opts.tempoBpm
   const barWhole = opts.num / opts.den
-  const beat = beatWholeNotes(opts.num, opts.den)
-  for (let t = 0; t + 1e-9 < barWhole; t += beat) {
-    const down = t < 1e-9
-    transport.schedule((time) => tick(time, down), t * wholeNoteSec)
+  for (const g of metronomeGrid(opts.num, opts.den, opts.subWhole)) {
+    transport.schedule((time) => tick(time, g.level), g.offsetWhole * wholeNoteSec)
   }
   transport.loop = true
   transport.loopStart = 0

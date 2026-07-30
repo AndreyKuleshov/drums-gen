@@ -10,7 +10,8 @@ app = FastAPI(title="Drum Pattern Generator")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Any localhost port (dev servers vary): 5173, 5180, etc.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
