@@ -114,6 +114,13 @@ function render(phrase: Phrase): void {
 
     for (const note of notes) noteEls.push(note.getSVGElement())
   }
+
+  // Focal reveal: stagger the notes lighting onto the display (capped total delay).
+  noteEls.forEach((el, i) => {
+    if (el === undefined) return
+    el.classList.add('note-enter')
+    el.style.animationDelay = `${Math.min(i * 16, 420)}ms`
+  })
 }
 
 const ACTIVE_CLASS = 'note-active'

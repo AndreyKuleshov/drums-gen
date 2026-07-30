@@ -32,15 +32,19 @@ const bases = [
   { value: '1/16', label: '1/16' },
 ]
 const feels = [
-  { value: 'straight', label: 'Straight' },
-  { value: 'triplet', label: 'Triplet' },
-  { value: 'mixed', label: 'Mixed' },
-  { value: 'authentic', label: 'Authentic' },
+  { value: 'straight', label: 'Straight', hint: 'Even notes at the chosen subdivision' },
+  { value: 'triplet', label: 'Triplet', hint: 'Triplet grid (three notes per beat)' },
+  { value: 'mixed', label: 'Mixed', hint: 'Mix of quarters, eighths and sixteenths per beat' },
+  {
+    value: 'authentic',
+    label: 'Authentic',
+    hint: "Rudiments play their real rhythm — a roll's release note is longer",
+  },
 ]
 const accentModes = [
-  { value: 'rudiment', label: 'Rudiment' },
-  { value: 'metric', label: 'Metric' },
-  { value: 'both', label: 'Both' },
+  { value: 'rudiment', label: 'Rudiment', hint: 'Accents where the rudiment places them' },
+  { value: 'metric', label: 'Metric', hint: 'Accents on the strong beats of the bar' },
+  { value: 'both', label: 'Both', hint: 'Rudiment accents plus the metric beats' },
 ]
 
 // Triplet turns a straight subdivision into its triplet grid (1/8 -> 1/12, 1/16 -> 1/24).
@@ -135,6 +139,7 @@ async function submit(): Promise<void> {
             type="button"
             role="radio"
             :aria-checked="form.feel === opt.value"
+            :title="opt.hint"
             :class="['segment__btn', { 'is-active': form.feel === opt.value }]"
             @click="form.feel = opt.value"
           >
@@ -152,6 +157,7 @@ async function submit(): Promise<void> {
             type="button"
             role="radio"
             :aria-checked="form.accent_mode === opt.value"
+            :title="opt.hint"
             :class="['segment__btn', { 'is-active': form.accent_mode === opt.value }]"
             @click="form.accent_mode = opt.value"
           >

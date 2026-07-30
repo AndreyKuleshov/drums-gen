@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import {
   parseFraction,
@@ -111,7 +111,21 @@ function onStop(): void {
   emit('step', null)
 }
 
+// Spacebar toggles pattern play/stop (ignored while typing in a control).
+function onKeydown(e: KeyboardEvent): void {
+  if (e.code !== 'Space') return
+  const tag = (e.target as HTMLElement | null)?.tagName
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return
+  if (props.phrase === null) return
+  e.preventDefault()
+  if (playing.value) onStop()
+  else void onPlay()
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
   stopPhrase()
 })
 </script>
@@ -448,6 +462,18 @@ onBeforeUnmount(() => {
 .metro-btn.is-on {
   color: var(--amber-bright);
   box-shadow: var(--shadow-1), 0 0 16px -5px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+  /* Gentle pulse so a running standalone metronome has a visual presence. */
+  animation: metro-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes metro-pulse {
+  0%,
+  100% {
+    box-shadow: var(--shadow-1), 0 0 14px -6px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+  }
+  50% {
+    box-shadow: var(--shadow-1), 0 0 22px -2px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.5);
+  }
 }
 
 .metro-div {
@@ -576,8 +602,33 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 560px) {
-  .transport {
+  /* Stack the transport into full-width rows so nothing clips off the chassis. */
+  .transport__buttons {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 14px;
+  }
+  .cluster {
     justify-content: center;
+    flex-wrap: wrap;
+  }
+  .cluster--metro {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .divider {
+    width: 100%;
+    min-height: 1px;
+    height: 1px;
+  }
+  .volume {
+    flex: 1 1 140px;
+  }
+  .volume__range {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
   }
   .readout {
     width: 100%;

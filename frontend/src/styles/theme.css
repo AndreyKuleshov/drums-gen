@@ -27,8 +27,8 @@
 
   /* Text (warm off-white + hue-tinted dims, no flat gray) */
   --text: #f1e9db;
-  --text-dim: #b3a691;
-  --text-faint: #8a7e6d;
+  --text-dim: #c2b6a2;
+  --text-faint: #a1947e;
   --danger: #ff6b5e;
 
   /* Type */
@@ -118,6 +118,22 @@ button:disabled {
 
 .score svg g.note-active {
   filter: drop-shadow(0 0 6px rgba(226, 86, 15, 0.55));
+}
+
+/* Focal moment: notes light onto the display, staggered, when a phrase renders. */
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.score svg g.note-enter {
+  animation: note-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

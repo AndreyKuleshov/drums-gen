@@ -9,10 +9,19 @@ import type { Phrase } from './types'
 const phrase = ref<Phrase | null>(null)
 const activeStep = ref<number | null>(null)
 const tempo = ref(100)
+const booting = ref(false)
+let bootTimer: ReturnType<typeof setTimeout> | null = null
 
 function onGenerated(next: Phrase): void {
   activeStep.value = null
   phrase.value = next
+  // Brief "display power-on" glow when new notation lands.
+  booting.value = false
+  if (bootTimer !== null) clearTimeout(bootTimer)
+  requestAnimationFrame(() => {
+    booting.value = true
+    bootTimer = setTimeout(() => (booting.value = false), 600)
+  })
 }
 </script>
 
@@ -31,7 +40,7 @@ function onGenerated(next: Phrase): void {
       </header>
 
       <section class="screen" aria-label="Notation display">
-        <div class="screen__glass">
+        <div class="screen__glass" :class="{ 'screen__glass--boot': booting }">
           <ScoreView v-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <span class="screen__empty-glyph" aria-hidden="true">&#9833;</span>
@@ -155,6 +164,27 @@ function onGenerated(next: Phrase): void {
   overflow: hidden;
   display: flex;
   align-items: center;
+}
+
+.screen__glass--boot {
+  animation: screen-boot 550ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes screen-boot {
+  0% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+      inset 0 2px 14px rgba(120, 96, 60, 0.18),
+      0 0 46px 2px var(--amber-glow);
+    filter: brightness(1.05);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+      inset 0 2px 14px rgba(120, 96, 60, 0.18),
+      0 0 22px -6px var(--amber-glow);
+    filter: brightness(1);
+  }
 }
 
 .screen__empty {
