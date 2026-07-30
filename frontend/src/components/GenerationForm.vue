@@ -12,25 +12,20 @@ const form = reactive({
   den: 4,
   num_bars: 2,
   base: '1/16',
-  triplet: false,
-  mixed: false,
+  feel: 'straight',
   tempo_bpm: 100,
   accent_mode: 'rudiment',
 })
 
-// Triplet (a grid) and Mixed (varied binary values) are mutually exclusive.
-function toggleTriplet(): void {
-  form.triplet = !form.triplet
-  if (form.triplet) form.mixed = false
-}
-function toggleMixed(): void {
-  form.mixed = !form.mixed
-  if (form.mixed) form.triplet = false
-}
-
 const bases = [
   { value: '1/8', label: '1/8' },
   { value: '1/16', label: '1/16' },
+]
+const feels = [
+  { value: 'straight', label: 'Straight' },
+  { value: 'triplet', label: 'Triplet' },
+  { value: 'mixed', label: 'Mixed' },
+  { value: 'authentic', label: 'Authentic' },
 ]
 const accentModes = [
   { value: 'rudiment', label: 'Rudiment' },
@@ -47,7 +42,8 @@ const loading = ref(false)
 async function submit(): Promise<void> {
   error.value = ''
   loading.value = true
-  const subdivision = form.triplet ? (TRIPLET_OF[form.base] ?? form.base) : form.base
+  const subdivision =
+    form.feel === 'triplet' ? (TRIPLET_OF[form.base] ?? form.base) : form.base
   try {
     const resp = await fetch(apiUrl('/generate'), {
       method: 'POST',
@@ -58,7 +54,8 @@ async function submit(): Promise<void> {
         min_subdivision: subdivision,
         tempo_bpm: form.tempo_bpm,
         accent_mode: form.accent_mode,
-        mixed: form.mixed,
+        mixed: form.feel === 'mixed',
+        authentic: form.feel === 'authentic',
       }),
     })
     if (!resp.ok) {
@@ -94,42 +91,19 @@ async function submit(): Promise<void> {
         <Stepper v-model="form.num_bars" :min="1" :max="64" label="Number of bars" />
       </div>
 
-      <div class="field field--seg">
+      <div class="field">
         <span class="field__label">Subdivision</span>
-        <div class="subdiv">
-          <div class="segment" role="radiogroup" aria-label="Subdivision">
-            <button
-              v-for="opt in bases"
-              :key="opt.value"
-              type="button"
-              role="radio"
-              :aria-checked="form.base === opt.value"
-              :class="['segment__btn', { 'is-active': form.base === opt.value }]"
-              @click="form.base = opt.value"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
+        <div class="segment" role="radiogroup" aria-label="Subdivision">
           <button
+            v-for="opt in bases"
+            :key="opt.value"
             type="button"
-            role="switch"
-            :aria-checked="form.triplet"
-            :class="['toggle', { 'is-on': form.triplet }]"
-            @click="toggleTriplet"
+            role="radio"
+            :aria-checked="form.base === opt.value"
+            :class="['segment__btn', { 'is-active': form.base === opt.value }]"
+            @click="form.base = opt.value"
           >
-            <span class="toggle__led" aria-hidden="true" />
-            Triplet
-          </button>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="form.mixed"
-            :class="['toggle', { 'is-on': form.mixed }]"
-            title="Mix note values (quarters, eighths, sixteenths) within a bar"
-            @click="toggleMixed"
-          >
-            <span class="toggle__led" aria-hidden="true" />
-            Mixed
+            {{ opt.label }}
           </button>
         </div>
       </div>
@@ -139,6 +113,23 @@ async function submit(): Promise<void> {
         <div class="tempo">
           <Stepper v-model="form.tempo_bpm" :min="20" :max="300" :step="2" label="Tempo" />
           <span class="tempo__unit">BPM</span>
+        </div>
+      </div>
+
+      <div class="field field--seg field--wide">
+        <span class="field__label">Feel</span>
+        <div class="segment" role="radiogroup" aria-label="Rhythmic feel">
+          <button
+            v-for="opt in feels"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="form.feel === opt.value"
+            :class="['segment__btn', { 'is-active': form.feel === opt.value }]"
+            @click="form.feel = opt.value"
+          >
+            {{ opt.label }}
+          </button>
         </div>
       </div>
 
@@ -239,53 +230,6 @@ async function submit(): Promise<void> {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   color: var(--text-faint);
-}
-
-.subdiv {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--edge);
-  background: linear-gradient(180deg, var(--raised), var(--panel));
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  box-shadow: var(--shadow-1);
-  transition:
-    color 0.15s ease,
-    box-shadow 0.18s ease;
-}
-
-.toggle:hover {
-  color: var(--text);
-}
-
-.toggle.is-on {
-  color: var(--amber-bright);
-  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.25);
-}
-
-.toggle__led {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--edge);
-}
-
-.toggle.is-on .toggle__led {
-  background: var(--amber);
-  box-shadow: 0 0 9px 1px var(--amber-glow);
 }
 
 .segment {

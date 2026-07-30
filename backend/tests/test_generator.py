@@ -177,3 +177,31 @@ def test_property_mixed_always_valid(num: int, num_bars: int, mode: AccentMode, 
     for bar in phrase.bars:
         total = sum((s.duration for s in bar.strokes), Fraction(0))
         assert total == bar.time_sig.bar_length
+
+
+def test_authentic_rolls_have_longer_release():
+    from drumgen.catalog import MVP_CATALOG
+
+    five = next(t for t in MVP_CATALOG if t.id == "five-stroke-roll")
+    assert five.total_weight == 6  # 1+1+1+1+2
+    assert five.elements[-1].weight == 2
+
+    # In authentic mode, whenever a roll is placed its release note is longer
+    # than the base value; across seeds at least one phrase shows the mix.
+    saw_long = False
+    for seed in range(12):
+        p = generate(_req(num_bars=2, authentic=True, seed=seed))
+        strokes = [s for b in p.bars for s in b.strokes]
+        assert find_violations(strokes) == []
+        for bar in p.bars:
+            total = sum((s.duration for s in bar.strokes), Fraction(0))
+            assert total == bar.time_sig.bar_length
+        if any(s.duration == Fraction(1, 8) for s in strokes):  # 2 * 1/16
+            saw_long = True
+    assert saw_long
+
+
+def test_authentic_off_keeps_uniform_durations():
+    # Weights are ignored unless authentic is on.
+    p = generate(_req(num_bars=2))
+    assert {s.duration for b in p.bars for s in b.strokes} == {Fraction(1, 16)}

@@ -6,6 +6,10 @@ from drumgen.domain.enums import Hand
 class RudimentElement(BaseModel):
     hand: Hand
     accent: bool = False
+    weight: int = 1
+    """Relative duration of this stroke, in base-grid units. 1 for a plain grid
+    note; larger for the longer release notes of authentic rudiment rhythms
+    (e.g. the accented tap that ends a roll)."""
 
 
 class RudimentTemplate(BaseModel):
@@ -19,19 +23,29 @@ class RudimentTemplate(BaseModel):
     def length_cells(self) -> int:
         return len(self.elements)
 
+    @property
+    def total_weight(self) -> int:
+        return sum(e.weight for e in self.elements)
+
     def mirrored(self) -> "RudimentTemplate":
         return RudimentTemplate(
             id=f"{self.id}-mirror",
             name=f"{self.name} (mirror)",
-            elements=[RudimentElement(hand=e.hand.other(), accent=e.accent) for e in self.elements],
+            elements=[
+                RudimentElement(hand=e.hand.other(), accent=e.accent, weight=e.weight)
+                for e in self.elements
+            ],
             mvp=self.mvp,
             violates_core_rules=self.violates_core_rules,
         )
 
 
-def _elems(sticking: str, accents: set[int]) -> list[RudimentElement]:
+def _elems(
+    sticking: str, accents: set[int], weights: dict[int, int] | None = None
+) -> list[RudimentElement]:
+    weights = weights or {}
     return [
-        RudimentElement(hand=Hand(ch), accent=(i in accents))
+        RudimentElement(hand=Hand(ch), accent=(i in accents), weight=weights.get(i, 1))
         for i, ch in enumerate(sticking.replace(" ", ""))
     ]
 
@@ -80,16 +94,17 @@ MVP_CATALOG: list[RudimentTemplate] = [
         violates_core_rules=False,
     ),
     RudimentTemplate(
+        # Authentic rhythm: four diddle notes, then a longer accented release.
         id="five-stroke-roll",
         name="Five Stroke Roll",
-        elements=_elems("RRLLR", {4}),
+        elements=_elems("RRLLR", {4}, weights={4: 2}),
         mvp=True,
         violates_core_rules=False,
     ),
     RudimentTemplate(
         id="seven-stroke-roll",
         name="Seven Stroke Roll",
-        elements=_elems("RRLLRRL", {6}),
+        elements=_elems("RRLLRRL", {6}, weights={6: 2}),
         mvp=True,
         violates_core_rules=False,
     ),

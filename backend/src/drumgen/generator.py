@@ -24,6 +24,9 @@ class GenerateRequest(BaseModel):
     mixed: bool = False
     """When true, rudiments are placed at varied note values (mix of e.g. quarters,
     eighths, sixteenths) instead of a single uniform subdivision."""
+    authentic: bool = False
+    """When true, rudiments carry their internal rhythm (per-element durations),
+    e.g. a roll's diddles are short and its accented release is longer."""
 
 
 def _is_metric_strong(pos: Fraction, beat: Fraction) -> bool:
@@ -99,17 +102,23 @@ def generate(req: GenerateRequest) -> Phrase:
 
     def build(template: RudimentTemplate, value: Fraction, start: Fraction) -> list[Stroke]:
         strokes: list[Stroke] = []
-        for k, elem in enumerate(template.elements):
-            pos = start + k * value
+        offset = Fraction(0)
+        for elem in template.elements:
+            weight = elem.weight if req.authentic else 1
+            pos = start + offset
             is_strong = _is_metric_strong(pos, beat)
             strokes.append(
                 Stroke(
-                    duration=value,
+                    duration=weight * value,
                     hand=elem.hand,
                     accent=_resolve_accent(elem.accent, is_strong, req.accent_mode),
                 )
             )
+            offset += weight * value
         return strokes
+
+    def span_units(template: RudimentTemplate) -> int:
+        return template.total_weight if req.authentic else template.length_cells
 
     # Fill unit: the whole bar (uniform) or a single beat (mixed, so each beat can
     # take a different note value). Each unit is filled with rudiments at one value.
@@ -152,7 +161,7 @@ def generate(req: GenerateRequest) -> Phrase:
         filler_shuffled = filler_pool[:]
         rng.shuffle(filler_shuffled)
         for template in (*phrase_shuffled, *filler_shuffled):
-            span = template.length_cells * value
+            span = span_units(template) * value
             if span > remaining:
                 continue
             new_strokes = build(template, value, start)
