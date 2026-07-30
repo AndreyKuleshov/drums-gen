@@ -4,6 +4,8 @@ export interface Stroke {
   accent: boolean
   articulation: string
   surface: string
+  /** Grace notes ornamenting this stroke: 0 = none, 1 = flam, 2 = drag. */
+  grace: number
   /** Index of the rudiment instance this stroke belongs to; notes are beamed by group. */
   group: number
 }
@@ -19,6 +21,7 @@ export interface PatternConfig {
   feel: string
   accents: string
   bars: number
+  difficulty: string
 }
 
 export interface Phrase {

@@ -11,6 +11,7 @@ export interface ScheduledStroke {
   timeSec: number
   velocity: number
   hand: 'L' | 'R'
+  grace: number
 }
 
 export function scheduleTimes(phrase: Phrase, tempoBpm: number = phrase.tempo_bpm): ScheduledStroke[] {
@@ -23,6 +24,7 @@ export function scheduleTimes(phrase: Phrase, tempoBpm: number = phrase.tempo_bp
         timeSec: elapsedWhole * wholeNoteSec,
         velocity: stroke.accent ? 1.0 : 0.6,
         hand: stroke.hand,
+        grace: stroke.grace,
       })
       elapsedWhole += parseFraction(stroke.duration)
     }
@@ -233,6 +235,13 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   }
 
   scheduleTimes(phrase, tempo).forEach((event, index) => {
+    // Grace notes (flam/drag): soft quick hits just before the main note.
+    for (let k = 0; k < event.grace; k++) {
+      const lead = (event.grace - k) * 0.032
+      transport.schedule((time) => {
+        safeTrigger(() => getNormalNoise().triggerAttackRelease('32n', time, 0.4))
+      }, Math.max(0, prerollSec + event.timeSec - lead))
+    }
     transport.schedule((time) => {
       hit(time, event.velocity >= 1)
       draw.schedule(() => opts.onStep?.(index), time)

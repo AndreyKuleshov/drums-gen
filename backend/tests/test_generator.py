@@ -5,7 +5,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from drumgen.domain.enums import AccentMode
+from drumgen.domain.enums import AccentMode, Difficulty
 from drumgen.domain.models import Stroke, TimeSignature
 from drumgen.generator import (
     GenerateRequest,
@@ -222,3 +222,30 @@ def test_generated_phrases_are_loop_safe():
                 strokes = [s for b in p.bars for s in b.strokes]
                 assert find_violations(strokes) == []
                 assert _loop_safe(strokes), (seed, num, feel)
+
+
+def test_beginner_never_uses_grace_notes():
+    # Flams/drags are pro-only; beginner stays valid and ornament-free.
+    for seed in range(15):
+        p = generate(_req(difficulty=Difficulty.BEGINNER, num_bars=2, seed=seed))
+        strokes = [s for b in p.bars for s in b.strokes]
+        assert find_violations(strokes) == []
+        assert all(s.grace == 0 for s in strokes)
+
+
+def test_pro_uses_flams_and_drags():
+    from drumgen.catalog import MVP_CATALOG
+
+    ids = {t.id for t in MVP_CATALOG}
+    assert {"flam-accent", "flam-tap", "drag-tap"} <= ids
+
+    saw_flam = saw_drag = False
+    for seed in range(24):
+        p = generate(_req(difficulty=Difficulty.PRO, num_bars=2, seed=seed))
+        strokes = [s for b in p.bars for s in b.strokes]
+        assert find_violations(strokes) == []
+        if any(s.grace == 1 for s in strokes):
+            saw_flam = True
+        if any(s.grace == 2 for s in strokes):
+            saw_drag = True
+    assert saw_flam and saw_drag

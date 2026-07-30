@@ -74,6 +74,23 @@ try {
   await page.waitForTimeout(400)
   await page.screenshot({ path: `${OUT}/04-mixed.png` })
 
+  // Pro difficulty, straight, 4 bars — regenerate a few times to surface flams/drags.
+  await page.getByRole('radio', { name: 'Pro' }).click()
+  await page.getByRole('radio', { name: 'Straight' }).click()
+  await page.getByRole('button', { name: 'Increase Number of bars' }).click()
+  await page.getByRole('button', { name: 'Increase Number of bars' }).click()
+  for (let t = 0; t < 5; t++) {
+    await page.getByRole('button', { name: 'Generate' }).click()
+    await page.waitForTimeout(600)
+    await page.locator('.screen').first().screenshot({ path: `${OUT}/07-pro-${t}.png` })
+  }
+
+  // Triplet feel — check tuplet brackets on one level + accents above them.
+  await page.getByRole('radio', { name: 'Triplet' }).click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await page.waitForTimeout(700)
+  await page.locator('.screen').first().screenshot({ path: `${OUT}/08-triplet.png` })
+
   // Transport close-up (new controls: pattern cluster | metronome + subdivision).
   const transport = page.locator('.transport').first()
   await transport.screenshot({ path: `${OUT}/06-transport.png` })

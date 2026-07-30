@@ -27,6 +27,7 @@ const formDefaults = {
   base: '1/16',
   feel: 'straight',
   accent_mode: 'rudiment',
+  difficulty: 'mid',
 }
 const form = reactive({ ...formDefaults, ...loadSetting('form', {}) })
 registerPersist(() => saveSetting('form', { ...form }))
@@ -34,6 +35,11 @@ registerPersist(() => saveSetting('form', { ...form }))
 const bases = [
   { value: '1/8', label: '1/8' },
   { value: '1/16', label: '1/16' },
+]
+const difficulties = [
+  { value: 'beginner', label: 'Beginner', hint: 'Single/double strokes and the single paradiddle' },
+  { value: 'mid', label: 'Mid', hint: 'Adds longer paradiddles and rolls' },
+  { value: 'pro', label: 'Pro', hint: 'Adds flams and drags — the full vocabulary' },
 ]
 const feels = [
   { value: 'straight', label: 'Straight', hint: 'Even notes at the chosen subdivision' },
@@ -55,6 +61,9 @@ const accentModes = [
 const TRIPLET_OF: Record<string, string> = { '1/8': '1/12', '1/16': '1/24' }
 
 const feelHint = computed(() => feels.find((f) => f.value === form.feel)?.hint ?? '')
+const difficultyHint = computed(
+  () => difficulties.find((d) => d.value === form.difficulty)?.hint ?? '',
+)
 
 // Live config for the summary plate — reflects the current form, updates on change.
 const liveConfig = computed<PatternConfig>(() => ({
@@ -63,6 +72,7 @@ const liveConfig = computed<PatternConfig>(() => ({
   feel: form.feel,
   accents: form.accent_mode,
   bars: form.num_bars,
+  difficulty: form.difficulty,
 }))
 watch(liveConfig, (c) => emit('update:config', c), { immediate: true, deep: true })
 
@@ -88,6 +98,7 @@ async function submit(): Promise<void> {
         accent_mode: form.accent_mode,
         mixed: form.feel === 'mixed',
         authentic: form.feel === 'authentic',
+        difficulty: form.difficulty,
       }),
     })
     if (!resp.ok) {
@@ -146,6 +157,25 @@ async function submit(): Promise<void> {
           <Stepper v-model="tempo" :min="20" :max="300" :step="2" label="Tempo" />
           <span class="tempo__unit">BPM</span>
         </div>
+      </div>
+
+      <div class="field field--seg field--wide">
+        <span class="field__label">Difficulty</span>
+        <div class="segment" role="radiogroup" aria-label="Difficulty">
+          <button
+            v-for="opt in difficulties"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="form.difficulty === opt.value"
+            :title="opt.hint"
+            :class="['segment__btn', { 'is-active': form.difficulty === opt.value }]"
+            @click="form.difficulty = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+        <p class="field__hint">{{ difficultyHint }}</p>
       </div>
 
       <div class="field field--seg field--wide">

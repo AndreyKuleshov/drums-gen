@@ -21,6 +21,7 @@ const summary = computed(() => {
   const c = config.value
   if (c === null) return null
   return {
+    level: cap(c.difficulty),
     meter: c.meter,
     grid: c.grid,
     feel: cap(c.feel),
@@ -71,6 +72,7 @@ function onGenerated(next: Phrase): void {
         </div>
 
         <dl v-if="summary" class="specplate" aria-label="Pattern summary">
+          <div><dt>Level</dt><dd>{{ summary.level }}</dd></div>
           <div><dt>Meter</dt><dd>{{ summary.meter }}</dd></div>
           <div><dt>Grid</dt><dd>{{ summary.grid }}</dd></div>
           <div><dt>Feel</dt><dd>{{ summary.feel }}</dd></div>

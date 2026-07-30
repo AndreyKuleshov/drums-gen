@@ -30,6 +30,10 @@ class Stroke(BaseModel):
     accent: bool = False
     articulation: Articulation = Articulation.NORMAL
     surface: Surface = Surface.SNARE
+    grace: int = 0
+    """Number of grace notes ornamenting this stroke: 0 = none, 1 = flam,
+    2 = drag. The grace notes are played by the opposite hand just before the
+    main note; they are excluded from the sticking rules."""
     group: int = 0
     """Index of the rudiment instance this stroke belongs to, within the phrase.
 

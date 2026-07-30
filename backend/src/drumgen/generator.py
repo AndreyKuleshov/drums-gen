@@ -4,10 +4,20 @@ from fractions import Fraction
 from pydantic import BaseModel, Field
 
 from drumgen.catalog import MVP_CATALOG, RudimentTemplate
-from drumgen.domain.enums import AccentMode
+from drumgen.domain.enums import AccentMode, Articulation, Difficulty
 from drumgen.domain.fractions import FractionField
 from drumgen.domain.models import Bar, Phrase, Stroke, TimeSignature
 from drumgen.rules import find_violations
+
+_DIFFICULTY_ORDER: dict[Difficulty, int] = {
+    Difficulty.BEGINNER: 0,
+    Difficulty.MID: 1,
+    Difficulty.PRO: 2,
+}
+_GRACE_ARTICULATION: dict[int, Articulation] = {
+    1: Articulation.FLAM,
+    2: Articulation.DRAG,
+}
 
 
 class GenerationError(Exception):
@@ -27,6 +37,9 @@ class GenerateRequest(BaseModel):
     authentic: bool = False
     """When true, rudiments carry their internal rhythm (per-element durations),
     e.g. a roll's diddles are short and its accented release is longer."""
+    difficulty: Difficulty = Difficulty.MID
+    """Selects which rudiments may be used: beginner = simple strokes/paradiddle,
+    mid = + longer paradiddles and rolls, pro = + flams and drags."""
 
 
 def _is_metric_strong(pos: Fraction, beat: Fraction) -> bool:
@@ -97,8 +110,11 @@ def generate(req: GenerateRequest) -> Phrase:
     beat = req.time_sig.beat_length
     values = _note_values(subdivision, bar_length, req.mixed)
     rng = random.Random(req.seed)
-    phrase_pool = _orientations([t for t in MVP_CATALOG if t.id not in _FILLER_IDS])
-    filler_pool = _orientations([t for t in MVP_CATALOG if t.id in _FILLER_IDS])
+    # Allowed rudiments: this difficulty tier and everything easier.
+    max_tier = _DIFFICULTY_ORDER[req.difficulty]
+    allowed = [t for t in MVP_CATALOG if _DIFFICULTY_ORDER[t.difficulty] <= max_tier]
+    phrase_pool = _orientations([t for t in allowed if t.id not in _FILLER_IDS])
+    filler_pool = _orientations([t for t in allowed if t.id in _FILLER_IDS])
 
     def build(template: RudimentTemplate, value: Fraction, start: Fraction) -> list[Stroke]:
         strokes: list[Stroke] = []
@@ -112,6 +128,8 @@ def generate(req: GenerateRequest) -> Phrase:
                     duration=weight * value,
                     hand=elem.hand,
                     accent=_resolve_accent(elem.accent, is_strong, req.accent_mode),
+                    grace=elem.grace,
+                    articulation=_GRACE_ARTICULATION.get(elem.grace, Articulation.NORMAL),
                 )
             )
             offset += weight * value

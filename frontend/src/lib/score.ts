@@ -30,6 +30,8 @@ export interface NoteSpec {
   duration: string
   accent: boolean
   sticking: 'L' | 'R'
+  /** Grace notes before this note: 0 = none, 1 = flam, 2 = drag. */
+  grace: number
   /** Rudiment-instance index carried from the backend; used to beam by phrase. */
   group: number
 }
@@ -39,6 +41,7 @@ export function barToNoteSpecs(bar: Bar): NoteSpec[] {
     duration: vexDuration(s.duration),
     accent: s.accent,
     sticking: s.hand,
+    grace: s.grace,
     group: s.group,
   }))
 }

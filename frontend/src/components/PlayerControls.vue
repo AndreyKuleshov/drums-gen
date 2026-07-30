@@ -76,6 +76,7 @@ async function startMetronome(): Promise<void> {
 }
 
 function onClickOnly(): void {
+  if (playing.value) return
   if (clicking.value) onStop()
   else void startMetronome()
 }
@@ -234,7 +235,9 @@ onBeforeUnmount(() => {
           role="switch"
           :aria-checked="clicking"
           :aria-label="clicking ? 'Stop metronome' : 'Start metronome'"
+          :disabled="playing"
           :class="{ 'is-on': clicking }"
+          title="Practice metronome — available when the pattern isn't playing"
           @click="onClickOnly"
         >
           <svg v-if="!clicking" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -526,8 +529,13 @@ onBeforeUnmount(() => {
   color: var(--text);
 }
 
-.metro-btn:active {
+.metro-btn:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.metro-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .metro-btn.is-on {

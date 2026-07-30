@@ -2,10 +2,10 @@
 import {
   Annotation,
   AnnotationVerticalJustify,
-  Articulation,
   Beam,
   Formatter,
-  Modifier,
+  GraceNote,
+  GraceNoteGroup,
   Renderer,
   Stave,
   StaveNote,
@@ -93,8 +93,19 @@ function render(phrase: Phrase): void {
       note.addModifier(
         new Annotation(spec.sticking).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
       )
-      if (spec.accent) {
-        note.addModifier(new Articulation('a>').setPosition(Modifier.Position.ABOVE))
+      // Accents are drawn manually (below) rather than as VexFlow articulations,
+      // so the tuplet bracket doesn't get pushed up to clear them — that keeps
+      // brackets on one level with the accents sitting above them.
+      // Flam (1) / drag (2): grace notes before the main note, played by the
+      // opposite hand. A single flam is slashed; a drag's two graces are beamed.
+      if (spec.grace > 0) {
+        const graceNotes = Array.from(
+          { length: spec.grace },
+          () => new GraceNote({ keys: ['b/4'], duration: '16', slash: spec.grace === 1 }),
+        )
+        const graceGroup = new GraceNoteGroup(graceNotes, false)
+        if (spec.grace === 2) graceGroup.beamNotes()
+        note.addModifier(graceGroup, 0)
       }
       return note
     })
@@ -107,13 +118,31 @@ function render(phrase: Phrase): void {
     const tuplets: Tuplet[] = []
     if (triplet) {
       for (let i = 0; i + 3 <= notes.length; i += 3) {
-        tuplets.push(new Tuplet(notes.slice(i, i + 3), { num_notes: 3, notes_occupied: 2 }))
+        const tuplet = new Tuplet(notes.slice(i, i + 3), {
+          num_notes: 3,
+          notes_occupied: 2,
+          bracketed: true,
+        })
+        // Raise brackets to a uniform line above the accent marks.
+        tuplet.setTupletLocation(Tuplet.LOCATION_TOP)
+        tuplets.push(tuplet)
       }
     }
 
     Formatter.FormatAndDraw(context, stave, notes)
     beams.forEach((beam) => beam.setContext(context).draw())
     tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+
+    // Manual accents: one flat row above the (uniform) tuplet brackets.
+    const accentIdx = specs.flatMap((s, i) => (s.accent ? [i] : []))
+    if (accentIdx.length > 0) {
+      const stemTop = Math.min(...notes.map((n) => n.getStemExtents().topY))
+      const accentY = stemTop - (triplet ? 26 : 14)
+      context.setFont('Georgia, serif', 15, 'bold')
+      for (const i of accentIdx) {
+        context.fillText('>', notes[i].getAbsoluteX() - 3, accentY)
+      }
+    }
 
     for (const note of notes) noteEls.push(note.getSVGElement())
   }

@@ -24,3 +24,9 @@ class AccentMode(StrEnum):
     RUDIMENT = "rudiment"
     METRIC = "metric"
     BOTH = "both"
+
+
+class Difficulty(StrEnum):
+    BEGINNER = "beginner"
+    MID = "mid"
+    PRO = "pro"
