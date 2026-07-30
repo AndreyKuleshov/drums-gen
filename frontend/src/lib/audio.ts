@@ -158,6 +158,15 @@ export function setMetronomeVolume(level: number): void {
   if (click !== null) click.volume.value = clickVolumeDb
 }
 
+// The pattern-overlay click is always scheduled but gated by this live flag, so
+// the "Click" toggle can turn it on/off during playback without restarting.
+let overlayClickOn = false
+
+/** Toggle the pattern-overlay metronome click live (no restart). */
+export function setOverlayClick(on: boolean): void {
+  overlayClickOn = on
+}
+
 function tick(time: number, level: ClickLevel): void {
   safeTrigger(() =>
     getClick().triggerAttackRelease(CLICK_HZ[level], '64n', time, CLICK_VEL[level]),
@@ -219,10 +228,12 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
     }, event.timeSec)
   })
 
-  if (opts.metronome) {
-    for (const beat of metronomeTimes(phrase, tempo, opts.metroSubWhole)) {
-      transport.schedule((time) => tick(time, beat.level), beat.timeSec)
-    }
+  // Always schedule the overlay clicks; the live flag decides whether they sound.
+  overlayClickOn = opts.metronome ?? false
+  for (const beat of metronomeTimes(phrase, tempo, opts.metroSubWhole)) {
+    transport.schedule((time) => {
+      if (overlayClickOn) tick(time, beat.level)
+    }, beat.timeSec)
   }
 
   // Always set the loop bounds so Loop can be toggled live mid-playback; whether

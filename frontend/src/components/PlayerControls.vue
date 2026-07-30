@@ -7,6 +7,7 @@ import {
   playPhrase,
   setLoop,
   setMetronomeVolume,
+  setOverlayClick,
   setTempo,
   stopPhrase,
 } from '../lib/audio'
@@ -91,6 +92,12 @@ function onToggleLoop(): void {
   if (playing.value) setLoop(loop.value)
 }
 
+// The overlay click can be toggled mid-playback without restarting.
+function onToggleClick(): void {
+  metronome.value = !metronome.value
+  if (playing.value) setOverlayClick(metronome.value)
+}
+
 // Changing the metronome subdivision restarts the standalone metronome so the
 // new division is heard right away.
 watch(metroSubWhole, () => {
@@ -159,7 +166,7 @@ onBeforeUnmount(() => {
           :aria-checked="metronome"
           :class="{ 'is-on': metronome }"
           title="Add a metronome click over the pattern"
-          @click="metronome = !metronome"
+          @click="onToggleClick"
         >
           <span class="toggle__led" aria-hidden="true" />
           Click
