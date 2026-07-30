@@ -23,9 +23,7 @@ services:
       - backend
     environment:
       - TZ=${TZ:-UTC}
-      # Coolify: auto-assign the public URL to this service on port 80.
-      # (Set the actual domain in the Coolify UI.)
-      - SERVICE_FQDN_FRONTEND_80
+    # The public domain for this service is set in Coolify (routes to port 80).
     expose:
       - "80"
     # For plain `docker compose up` (no Coolify), publish a host port instead:
