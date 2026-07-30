@@ -6,6 +6,7 @@ import {
   playMetronome,
   playPhrase,
   setLoop,
+  setMetroSub,
   setMetronomeVolume,
   setOverlayClick,
   setTempo,
@@ -42,6 +43,10 @@ const metroSubWhole = computed(() =>
 const metroVolume = ref(0.75)
 watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 
+// Shared subdivision: one setting drives both the overlay click and the
+// standalone metronome, and applies live (no restart) to either.
+watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
+
 const meta = computed(() => {
   if (props.phrase === null) return null
   const strokes = props.phrase.bars.flatMap((b) => b.strokes)
@@ -54,7 +59,6 @@ async function onPlay(): Promise<void> {
   playing.value = true
   await playPhrase(props.phrase, {
     metronome: metronome.value,
-    metroSubWhole: metroSubWhole.value,
     loop: loop.value,
     tempoBpm: props.tempo,
     onStep: (index) => emit('step', index),
@@ -70,7 +74,7 @@ async function startMetronome(): Promise<void> {
   clicking.value = true
   const num = props.phrase?.time_sig.num ?? 4
   const den = props.phrase?.time_sig.den ?? 4
-  await playMetronome({ tempoBpm: props.tempo, num, den, subWhole: metroSubWhole.value })
+  await playMetronome({ tempoBpm: props.tempo, num, den })
 }
 
 function onClickOnly(): void {
@@ -98,11 +102,6 @@ function onToggleClick(): void {
   if (playing.value) setOverlayClick(metronome.value)
 }
 
-// Changing the metronome subdivision restarts the standalone metronome so the
-// new division is heard right away.
-watch(metroSubWhole, () => {
-  if (clicking.value) void startMetronome()
-})
 
 function onStop(): void {
   stopPhrase()

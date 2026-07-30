@@ -43,25 +43,6 @@ function beatWholeNotes(num: number, den: number): number {
   return (compound ? 3 : 1) / den
 }
 
-/** Absolute times (sec) + accent level of every metronome click across the phrase. */
-export function metronomeTimes(
-  phrase: Phrase,
-  tempoBpm: number = phrase.tempo_bpm,
-  subWhole?: number,
-): { timeSec: number; level: 'down' | 'beat' | 'sub' }[] {
-  const wholeNoteSec = 240 / tempoBpm
-  const { num, den } = phrase.time_sig
-  const barWhole = num / den
-  const grid = metronomeGrid(num, den, subWhole)
-  const out: { timeSec: number; level: 'down' | 'beat' | 'sub' }[] = []
-  for (let bar = 0; bar < phrase.bars.length; bar++) {
-    for (const g of grid) {
-      out.push({ timeSec: (bar * barWhole + g.offsetWhole) * wholeNoteSec, level: g.level })
-    }
-  }
-  return out
-}
-
 // Snare voice: two clearly audible levels — a normal hit and a louder, fuller
 // accent (extra brightness + a bit of drum body). Both are plainly heard; the
 // accent just stands out. (Swap these for real samples later via a Tone.Sampler.)
@@ -159,13 +140,40 @@ export function setMetronomeVolume(level: number): void {
   if (click !== null) click.volume.value = clickVolumeDb
 }
 
-// The pattern-overlay click is always scheduled but gated by this live flag, so
-// the "Click" toggle can turn it on/off during playback without restarting.
+// Shared, live metronome settings — one source of truth for BOTH the pattern
+// overlay click and the standalone metronome. Clicks are scheduled on a fine
+// 1/48 grid (a common divisor of every offered subdivision), and each scheduled
+// tick reads the live subdivision/on-state, so changing the division while a
+// pattern plays takes effect immediately.
+const FINE = 1 / 48
+let metroSubWhole = 1 / 4
 let overlayClickOn = false
+
+/** Set the shared metronome click subdivision live (spacing in whole notes). */
+export function setMetroSub(subWhole: number): void {
+  metroSubWhole = subWhole
+}
 
 /** Toggle the pattern-overlay metronome click live (no restart). */
 export function setOverlayClick(on: boolean): void {
   overlayClickOn = on
+}
+
+function nearInt(x: number): boolean {
+  return Math.abs(x - Math.round(x)) < 1e-6
+}
+
+/** Accent level of a click at `offsetWhole` from a bar start, for subdivision
+ * `subWhole` — or null when no click falls there. */
+export function clickLevelAt(
+  offsetWhole: number,
+  beatWhole: number,
+  subWhole: number,
+): ClickLevel | null {
+  if (!nearInt(offsetWhole / subWhole)) return null
+  if (offsetWhole < 1e-9) return 'down'
+  if (nearInt(offsetWhole / beatWhole)) return 'beat'
+  return 'sub'
 }
 
 function tick(time: number, level: ClickLevel): void {
@@ -174,35 +182,13 @@ function tick(time: number, level: ClickLevel): void {
   )
 }
 
-/** Click positions and accent levels for one meter, at a given click subdivision.
- * `subWhole` is the click spacing in whole notes; omit for one click per beat. */
-export function metronomeGrid(
-  num: number,
-  den: number,
-  subWhole?: number,
-): { offsetWhole: number; level: ClickLevel }[] {
-  const barWhole = num / den
-  const beat = beatWholeNotes(num, den)
-  const step = subWhole ?? beat
-  const stepsPerBar = Math.round(barWhole / step)
-  const beatSteps = Math.max(1, Math.round(beat / step))
-  const out: { offsetWhole: number; level: ClickLevel }[] = []
-  for (let i = 0; i < stepsPerBar; i++) {
-    const level: ClickLevel = i === 0 ? 'down' : i % beatSteps === 0 ? 'beat' : 'sub'
-    out.push({ offsetWhole: i * step, level })
-  }
-  return out
-}
-
 export interface PlayOptions {
   /** Called (draw-synced) as each note sounds; receives the global note index, or null at the end. */
   onStep?: (index: number | null) => void
   /** Called when playback finishes. */
   onEnd?: () => void
-  /** Play a metronome click track alongside the pattern. */
+  /** Play a metronome click track alongside the pattern (uses the shared settings). */
   metronome?: boolean
-  /** Metronome click spacing (whole notes); omit for one click per beat. */
-  metroSubWhole?: number
   /** Repeat the pattern continuously until stopped. */
   loop?: boolean
   /** Playback tempo; overrides the phrase's baked-in tempo so it can change live. */
@@ -221,6 +207,7 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   // ticks land on the musical positions — and changing bpm later (setTempo)
   // retimes everything live, without restarting.
   transport.bpm.value = tempo
+  const wholeNoteSec = 240 / tempo
 
   scheduleTimes(phrase, tempo).forEach((event, index) => {
     transport.schedule((time) => {
@@ -229,12 +216,25 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
     }, event.timeSec)
   })
 
-  // Always schedule the overlay clicks; the live flag decides whether they sound.
+  // Overlay clicks: schedule a fine grid across the phrase; each tick reads the
+  // live on-flag and subdivision, so both can change during playback.
   overlayClickOn = opts.metronome ?? false
-  for (const beat of metronomeTimes(phrase, tempo, opts.metroSubWhole)) {
-    transport.schedule((time) => {
-      if (overlayClickOn) tick(time, beat.level)
-    }, beat.timeSec)
+  {
+    const { num, den } = phrase.time_sig
+    const beat = beatWholeNotes(num, den)
+    const barWhole = num / den
+    const finePerBar = Math.round(barWhole / FINE)
+    for (let bar = 0; bar < phrase.bars.length; bar++) {
+      for (let i = 0; i < finePerBar; i++) {
+        const offset = i * FINE
+        const timeSec = (bar * barWhole + offset) * wholeNoteSec
+        transport.schedule((time) => {
+          if (!overlayClickOn) return
+          const level = clickLevelAt(offset, beat, metroSubWhole)
+          if (level !== null) tick(time, level)
+        }, timeSec)
+      }
+    }
   }
 
   // Always set the loop bounds so Loop can be toggled live mid-playback; whether
@@ -273,21 +273,27 @@ export function stopPhrase(): void {
   transport.loop = false
 }
 
-/** Loop a metronome click track on its own (no pattern), one bar of the given meter. */
+/** Loop a standalone metronome (no pattern), one bar of the given meter, using
+ * the shared subdivision/volume so changing them applies live here too. */
 export async function playMetronome(opts: {
   tempoBpm: number
   num: number
   den: number
-  subWhole?: number
 }): Promise<void> {
   await Tone.start()
   const transport = Tone.getTransport()
   stopPhrase()
   transport.bpm.value = opts.tempoBpm
   const wholeNoteSec = 240 / opts.tempoBpm
+  const beat = beatWholeNotes(opts.num, opts.den)
   const barWhole = opts.num / opts.den
-  for (const g of metronomeGrid(opts.num, opts.den, opts.subWhole)) {
-    transport.schedule((time) => tick(time, g.level), g.offsetWhole * wholeNoteSec)
+  const finePerBar = Math.round(barWhole / FINE)
+  for (let i = 0; i < finePerBar; i++) {
+    const offset = i * FINE
+    transport.schedule((time) => {
+      const level = clickLevelAt(offset, beat, metroSubWhole)
+      if (level !== null) tick(time, level)
+    }, offset * wholeNoteSec)
   }
   transport.loop = true
   transport.loopStart = 0

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Phrase } from '../../types'
-import { metronomeGrid, parseFraction, scheduleTimes } from '../audio'
+import { clickLevelAt, parseFraction, scheduleTimes } from '../audio'
 
 const phrase: Phrase = {
   time_sig: { num: 2, den: 4 },
@@ -35,24 +35,24 @@ describe('scheduleTimes', () => {
   })
 })
 
-describe('metronomeGrid', () => {
-  it('one click per beat by default (4/4)', () => {
-    const g = metronomeGrid(4, 4)
-    expect(g.map((x) => x.level)).toEqual(['down', 'beat', 'beat', 'beat'])
+describe('clickLevelAt', () => {
+  const beat = 1 / 4 // quarter-note beat in 4/4
+
+  it('quarter subdivision: click only on beats, downbeat at bar start', () => {
+    expect(clickLevelAt(0, beat, 1 / 4)).toBe('down')
+    expect(clickLevelAt(1 / 4, beat, 1 / 4)).toBe('beat')
+    expect(clickLevelAt(1 / 8, beat, 1 / 4)).toBeNull()
   })
 
-  it('subdivides into eighths with soft off-beats, accents on quarters', () => {
-    const g = metronomeGrid(4, 4, 1 / 8)
-    expect(g.map((x) => x.level)).toEqual([
-      'down', 'sub', 'beat', 'sub', 'beat', 'sub', 'beat', 'sub',
-    ])
+  it('eighth subdivision: soft off-beats between accented beats', () => {
+    expect(clickLevelAt(0, beat, 1 / 8)).toBe('down')
+    expect(clickLevelAt(1 / 8, beat, 1 / 8)).toBe('sub')
+    expect(clickLevelAt(1 / 4, beat, 1 / 8)).toBe('beat')
   })
 
-  it('triplet eighths give two soft clicks between each beat', () => {
-    const g = metronomeGrid(4, 4, 1 / 12)
-    expect(g.length).toBe(12)
-    expect(g.filter((x) => x.level !== 'sub').map((x) => x.level)).toEqual([
-      'down', 'beat', 'beat', 'beat',
-    ])
+  it('triplet subdivision: two soft clicks between beats, no straight-16th click', () => {
+    expect(clickLevelAt(1 / 12, beat, 1 / 12)).toBe('sub')
+    expect(clickLevelAt(1 / 4, beat, 1 / 12)).toBe('beat')
+    expect(clickLevelAt(1 / 16, beat, 1 / 12)).toBeNull()
   })
 })
