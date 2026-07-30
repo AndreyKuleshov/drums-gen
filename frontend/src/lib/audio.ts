@@ -193,6 +193,9 @@ export interface PlayOptions {
   loop?: boolean
   /** Playback tempo; overrides the phrase's baked-in tempo so it can change live. */
   tempoBpm?: number
+  /** Count-in bars of metronome before the pattern starts (0 = none). Plays once,
+   * even when looping. */
+  prerollBars?: number
 }
 
 export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promise<void> {
@@ -209,38 +212,52 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   transport.bpm.value = tempo
   const wholeNoteSec = 240 / tempo
 
+  const { num, den } = phrase.time_sig
+  const beat = beatWholeNotes(num, den)
+  const barWhole = num / den
+  const finePerBar = Math.round(barWhole / FINE)
+
+  // Count-in before the pattern. It occupies [0, prerollSec); the loop later
+  // starts at prerollSec, so the count-in plays exactly once even when looping.
+  const prerollBars = Math.max(0, Math.trunc(opts.prerollBars ?? 0))
+  const prerollSec = prerollBars * barWhole * wholeNoteSec
+  for (let bar = 0; bar < prerollBars; bar++) {
+    for (let i = 0; i < finePerBar; i++) {
+      const offset = i * FINE
+      const timeSec = (bar * barWhole + offset) * wholeNoteSec
+      transport.schedule((time) => {
+        const level = clickLevelAt(offset, beat, metroSubWhole)
+        if (level !== null) tick(time, level)
+      }, timeSec)
+    }
+  }
+
   scheduleTimes(phrase, tempo).forEach((event, index) => {
     transport.schedule((time) => {
       hit(time, event.velocity >= 1)
       draw.schedule(() => opts.onStep?.(index), time)
-    }, event.timeSec)
+    }, prerollSec + event.timeSec)
   })
 
   // Overlay clicks: schedule a fine grid across the phrase; each tick reads the
   // live on-flag and subdivision, so both can change during playback.
   overlayClickOn = opts.metronome ?? false
-  {
-    const { num, den } = phrase.time_sig
-    const beat = beatWholeNotes(num, den)
-    const barWhole = num / den
-    const finePerBar = Math.round(barWhole / FINE)
-    for (let bar = 0; bar < phrase.bars.length; bar++) {
-      for (let i = 0; i < finePerBar; i++) {
-        const offset = i * FINE
-        const timeSec = (bar * barWhole + offset) * wholeNoteSec
-        transport.schedule((time) => {
-          if (!overlayClickOn) return
-          const level = clickLevelAt(offset, beat, metroSubWhole)
-          if (level !== null) tick(time, level)
-        }, timeSec)
-      }
+  for (let bar = 0; bar < phrase.bars.length; bar++) {
+    for (let i = 0; i < finePerBar; i++) {
+      const offset = i * FINE
+      const timeSec = prerollSec + (bar * barWhole + offset) * wholeNoteSec
+      transport.schedule((time) => {
+        if (!overlayClickOn) return
+        const level = clickLevelAt(offset, beat, metroSubWhole)
+        if (level !== null) tick(time, level)
+      }, timeSec)
     }
   }
 
-  // Always set the loop bounds so Loop can be toggled live mid-playback; whether
-  // it actually loops is just the transport.loop flag.
-  const endSec = phraseWholeNotes(phrase) * (240 / tempo)
-  transport.loopStart = 0
+  // Loop only the pattern (after the count-in). Bounds are always set so Loop can
+  // be toggled live; whether it repeats is just the transport.loop flag.
+  const endSec = prerollSec + phraseWholeNotes(phrase) * wholeNoteSec
+  transport.loopStart = prerollSec
   transport.loopEnd = endSec
   transport.loop = opts.loop ?? false
 

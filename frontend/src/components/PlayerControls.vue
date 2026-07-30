@@ -21,6 +21,8 @@ const playing = ref(false)
 const clicking = ref(false)
 const metronome = ref(false)
 const loop = ref(false)
+const preroll = ref(false)
+const prerollBars = ref(1)
 
 // Metronome click subdivision (accents stay on the quarter beats).
 const metroBase = ref('1/4')
@@ -61,6 +63,7 @@ async function onPlay(): Promise<void> {
     metronome: metronome.value,
     loop: loop.value,
     tempoBpm: props.tempo,
+    prerollBars: preroll.value ? prerollBars.value : 0,
     onStep: (index) => emit('step', index),
     onEnd: () => {
       playing.value = false
@@ -190,6 +193,34 @@ onBeforeUnmount(() => {
           <span class="toggle__led" aria-hidden="true" />
           Click
         </button>
+
+        <div class="preroll">
+          <button
+            class="toggle"
+            type="button"
+            role="switch"
+            :aria-checked="preroll"
+            :class="{ 'is-on': preroll }"
+            title="Count-in bars of metronome before the pattern starts"
+            @click="preroll = !preroll"
+          >
+            <span class="toggle__led" aria-hidden="true" />
+            Pre-roll
+          </button>
+          <div v-if="preroll" class="metro-div" role="radiogroup" aria-label="Pre-roll bars">
+            <button
+              v-for="n in [1, 2]"
+              :key="n"
+              type="button"
+              role="radio"
+              :aria-checked="prerollBars === n"
+              :class="['metro-div__btn', { 'is-active': prerollBars === n }]"
+              @click="prerollBars = n"
+            >
+              {{ n }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <span class="divider" aria-hidden="true" />
@@ -433,6 +464,12 @@ onBeforeUnmount(() => {
 .toggle.is-on .toggle__led {
   background: var(--amber);
   box-shadow: 0 0 9px 1px var(--amber-glow);
+}
+
+.preroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Standalone metronome (its own tool) */
