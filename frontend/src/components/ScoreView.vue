@@ -11,7 +11,7 @@ import {
   StaveNote,
   Tuplet,
 } from 'vexflow'
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 import { barToNoteSpecs, beamGroups, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
@@ -130,15 +130,19 @@ function highlight(index: number | null | undefined): void {
   }
 }
 
+// Render on mount (the component is v-if'd in once a phrase exists, so the
+// container is in the DOM here) and on every later phrase change. An immediate
+// watch would fire synchronously before mount, when the container is still null.
+onMounted(() => {
+  if (props.phrase !== null) render(props.phrase)
+})
+
 watch(
   () => props.phrase,
   (phrase) => {
     litEl = undefined
     if (phrase !== null) render(phrase)
   },
-  // 'post' so the container is mounted in the DOM before the first render —
-  // otherwise the first generated phrase renders to nothing.
-  { immediate: true, flush: 'post' },
 )
 
 watch(

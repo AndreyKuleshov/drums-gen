@@ -13,8 +13,8 @@ export interface ScheduledStroke {
   hand: 'L' | 'R'
 }
 
-export function scheduleTimes(phrase: Phrase): ScheduledStroke[] {
-  const wholeNoteSec = 240 / phrase.tempo_bpm // 4 quarters * (60/bpm)
+export function scheduleTimes(phrase: Phrase, tempoBpm: number = phrase.tempo_bpm): ScheduledStroke[] {
+  const wholeNoteSec = 240 / tempoBpm // 4 quarters * (60/bpm)
   const events: ScheduledStroke[] = []
   let elapsedWhole = 0
   for (const bar of phrase.bars) {
@@ -44,8 +44,11 @@ function beatWholeNotes(num: number, den: number): number {
 }
 
 /** Absolute times (sec) of every metronome beat, flagged as downbeat or not. */
-export function metronomeTimes(phrase: Phrase): { timeSec: number; down: boolean }[] {
-  const wholeNoteSec = 240 / phrase.tempo_bpm
+export function metronomeTimes(
+  phrase: Phrase,
+  tempoBpm: number = phrase.tempo_bpm,
+): { timeSec: number; down: boolean }[] {
+  const wholeNoteSec = 240 / tempoBpm
   const { num, den } = phrase.time_sig
   const barWhole = num / den
   const beat = beatWholeNotes(num, den)
@@ -58,10 +61,11 @@ export function metronomeTimes(phrase: Phrase): { timeSec: number; down: boolean
   return out
 }
 
-// Snare voice, split so an accent is unmistakably louder, brighter and fuller
-// than a ghost note. (Swap these for real samples later via a Tone.Sampler.)
+// Snare voice: two clearly audible levels — a normal hit and a louder, fuller
+// accent (extra brightness + a bit of drum body). Both are plainly heard; the
+// accent just stands out. (Swap these for real samples later via a Tone.Sampler.)
 let accentNoise: Tone.NoiseSynth | null = null
-let ghostNoise: Tone.NoiseSynth | null = null
+let normalNoise: Tone.NoiseSynth | null = null
 let body: Tone.MembraneSynth | null = null
 let click: Tone.MembraneSynth | null = null
 
@@ -69,27 +73,28 @@ function getAccentNoise(): Tone.NoiseSynth {
   if (accentNoise === null) {
     accentNoise = new Tone.NoiseSynth({
       noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.14, sustain: 0 },
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
     })
     const filter = new Tone.Filter(4200, 'bandpass').toDestination()
-    filter.Q.value = 0.7
+    filter.Q.value = 0.6
     accentNoise.connect(filter)
-    accentNoise.volume.value = 0
+    accentNoise.volume.value = 1
   }
   return accentNoise
 }
 
-function getGhostNoise(): Tone.NoiseSynth {
-  if (ghostNoise === null) {
-    ghostNoise = new Tone.NoiseSynth({
-      noise: { type: 'pink' },
-      envelope: { attack: 0.001, decay: 0.04, sustain: 0 },
+function getNormalNoise(): Tone.NoiseSynth {
+  if (normalNoise === null) {
+    normalNoise = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.08, sustain: 0 },
     })
-    const filter = new Tone.Filter(1500, 'lowpass').toDestination()
-    ghostNoise.connect(filter)
-    ghostNoise.volume.value = -16
+    const filter = new Tone.Filter(2700, 'bandpass').toDestination()
+    filter.Q.value = 0.6
+    normalNoise.connect(filter)
+    normalNoise.volume.value = -5
   }
-  return ghostNoise
+  return normalNoise
 }
 
 function getBody(): Tone.MembraneSynth {
@@ -99,7 +104,7 @@ function getBody(): Tone.MembraneSynth {
       octaves: 3,
       envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
     }).toDestination()
-    body.volume.value = -8
+    body.volume.value = -7
   }
   return body
 }
@@ -109,7 +114,7 @@ function hit(time: number, accent: boolean): void {
     getAccentNoise().triggerAttackRelease('16n', time, 1)
     getBody().triggerAttackRelease('D2', '16n', time, 0.9)
   } else {
-    getGhostNoise().triggerAttackRelease('32n', time, 0.9)
+    getNormalNoise().triggerAttackRelease('16n', time, 0.85)
   }
 }
 
@@ -132,6 +137,10 @@ export interface PlayOptions {
   onEnd?: () => void
   /** Play a metronome click track alongside the pattern. */
   metronome?: boolean
+  /** Repeat the pattern continuously until stopped. */
+  loop?: boolean
+  /** Playback tempo; overrides the phrase's baked-in tempo so it can change live. */
+  tempoBpm?: number
 }
 
 export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promise<void> {
@@ -139,8 +148,9 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   const transport = Tone.getTransport()
   stopPhrase()
   const draw = Tone.getDraw()
+  const tempo = opts.tempoBpm ?? phrase.tempo_bpm
 
-  scheduleTimes(phrase).forEach((event, index) => {
+  scheduleTimes(phrase, tempo).forEach((event, index) => {
     transport.schedule((time) => {
       hit(time, event.velocity >= 1)
       draw.schedule(() => opts.onStep?.(index), time)
@@ -149,20 +159,28 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
 
   if (opts.metronome) {
     const c = getClick()
-    for (const beat of metronomeTimes(phrase)) {
+    for (const beat of metronomeTimes(phrase, tempo)) {
       transport.schedule((time) => {
         c.triggerAttackRelease(beat.down ? 'C3' : 'G2', '32n', time, beat.down ? 1 : 0.5)
       }, beat.timeSec)
     }
   }
 
-  const endSec = phraseWholeNotes(phrase) * (240 / phrase.tempo_bpm)
-  transport.schedule((time) => {
-    draw.schedule(() => {
-      opts.onStep?.(null)
-      opts.onEnd?.()
-    }, time)
-  }, endSec)
+  const endSec = phraseWholeNotes(phrase) * (240 / tempo)
+  if (opts.loop) {
+    // Repeat forever: the scheduled notes and their draw callbacks re-fire each
+    // cycle, so highlighting loops too. No terminal onEnd — Stop ends it.
+    transport.loop = true
+    transport.loopStart = 0
+    transport.loopEnd = endSec
+  } else {
+    transport.schedule((time) => {
+      draw.schedule(() => {
+        opts.onStep?.(null)
+        opts.onEnd?.()
+      }, time)
+    }, endSec)
+  }
 
   transport.start()
 }

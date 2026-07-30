@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { playMetronome, playPhrase, stopPhrase } from '../lib/audio'
 import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase | null }>()
+const props = defineProps<{ phrase: Phrase | null; tempo: number }>()
 const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
 const clicking = ref(false)
 const metronome = ref(false)
+const loop = ref(false)
 
 const meta = computed(() => {
   if (props.phrase === null) return null
   const strokes = props.phrase.bars.flatMap((b) => b.strokes)
-  return { tempo: props.phrase.tempo_bpm, bars: props.phrase.bars.length, notes: strokes.length }
+  return { bars: props.phrase.bars.length, notes: strokes.length }
 })
 
 async function onPlay(): Promise<void> {
@@ -23,6 +24,8 @@ async function onPlay(): Promise<void> {
   playing.value = true
   await playPhrase(props.phrase, {
     metronome: metronome.value,
+    loop: loop.value,
+    tempoBpm: props.tempo,
     onStep: (index) => emit('step', index),
     onEnd: () => {
       playing.value = false
@@ -40,9 +43,21 @@ async function onClickOnly(): Promise<void> {
   clicking.value = true
   const num = props.phrase?.time_sig.num ?? 4
   const den = props.phrase?.time_sig.den ?? 4
-  const tempoBpm = props.phrase?.tempo_bpm ?? 100
-  await playMetronome({ tempoBpm, num, den })
+  await playMetronome({ tempoBpm: props.tempo, num, den })
 }
+
+// Tempo is live: if it changes mid-playback, restart at the new tempo so the
+// change is heard immediately without regenerating.
+watch(
+  () => props.tempo,
+  () => {
+    if (playing.value) void onPlay()
+    else if (clicking.value) {
+      clicking.value = false
+      void onClickOnly()
+    }
+  },
+)
 
 function onStop(): void {
   stopPhrase()
@@ -77,7 +92,30 @@ onBeforeUnmount(() => {
       </button>
 
       <button
-        class="click"
+        class="icon-btn"
+        type="button"
+        role="switch"
+        :class="{ 'is-on': loop }"
+        :aria-checked="loop"
+        aria-label="Loop"
+        title="Loop the pattern"
+        @click="loop = !loop"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path
+            d="M7 7h9a4 4 0 0 1 4 4M17 17H8a4 4 0 0 1-4-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path d="M15 4.5 18 7l-3 2.5M9 19.5 6 17l3-2.5" fill="currentColor" />
+        </svg>
+      </button>
+
+      <button
+        class="icon-btn"
         type="button"
         :class="{ 'is-on': clicking }"
         :aria-pressed="clicking"
@@ -120,7 +158,7 @@ onBeforeUnmount(() => {
     </div>
 
     <dl v-if="meta" class="readout">
-      <div><dt>Tempo</dt><dd>{{ meta.tempo }}<small> BPM</small></dd></div>
+      <div><dt>Tempo</dt><dd>{{ tempo }}<small> BPM</small></dd></div>
       <div><dt>Bars</dt><dd>{{ meta.bars }}</dd></div>
       <div><dt>Notes</dt><dd>{{ meta.notes }}</dd></div>
     </dl>
@@ -198,7 +236,7 @@ onBeforeUnmount(() => {
   transform: translateY(1px);
 }
 
-.click {
+.icon-btn {
   display: grid;
   place-items: center;
   width: 44px;
@@ -214,15 +252,15 @@ onBeforeUnmount(() => {
     transform 0.12s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-.click:hover {
+.icon-btn:hover {
   color: var(--text);
 }
 
-.click:active {
+.icon-btn:active {
   transform: translateY(1px);
 }
 
-.click.is-on {
+.icon-btn.is-on {
   color: var(--amber-bright);
   box-shadow: var(--shadow-1), 0 0 16px -4px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
 }

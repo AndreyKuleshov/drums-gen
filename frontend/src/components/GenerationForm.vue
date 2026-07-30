@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 import { apiUrl } from '../lib/api'
 import type { Phrase } from '../types'
 import Stepper from './Stepper.vue'
 
-const emit = defineEmits<{ (e: 'update:phrase', phrase: Phrase): void }>()
+// Tempo lives one level up so it can change playback live, independent of the
+// generated pattern. Everything else is baked into the phrase at generation.
+const props = defineProps<{ tempo: number }>()
+const emit = defineEmits<{
+  (e: 'update:phrase', phrase: Phrase): void
+  (e: 'update:tempo', value: number): void
+}>()
+
+const tempo = computed({
+  get: () => props.tempo,
+  set: (value: number) => emit('update:tempo', value),
+})
 
 const form = reactive({
   num: 4,
@@ -13,7 +24,6 @@ const form = reactive({
   num_bars: 2,
   base: '1/16',
   feel: 'straight',
-  tempo_bpm: 100,
   accent_mode: 'rudiment',
 })
 
@@ -52,7 +62,7 @@ async function submit(): Promise<void> {
         time_sig: { num: form.num, den: form.den },
         num_bars: form.num_bars,
         min_subdivision: subdivision,
-        tempo_bpm: form.tempo_bpm,
+        tempo_bpm: props.tempo,
         accent_mode: form.accent_mode,
         mixed: form.feel === 'mixed',
         authentic: form.feel === 'authentic',
@@ -111,7 +121,7 @@ async function submit(): Promise<void> {
       <div class="field">
         <span class="field__label">Tempo</span>
         <div class="tempo">
-          <Stepper v-model="form.tempo_bpm" :min="20" :max="300" :step="2" label="Tempo" />
+          <Stepper v-model="tempo" :min="20" :max="300" :step="2" label="Tempo" />
           <span class="tempo__unit">BPM</span>
         </div>
       </div>

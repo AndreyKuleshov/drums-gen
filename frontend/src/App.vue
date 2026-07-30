@@ -8,6 +8,7 @@ import type { Phrase } from './types'
 
 const phrase = ref<Phrase | null>(null)
 const activeStep = ref<number | null>(null)
+const tempo = ref(100)
 
 function onGenerated(next: Phrase): void {
   activeStep.value = null
@@ -41,9 +42,9 @@ function onGenerated(next: Phrase): void {
         </div>
       </section>
 
-      <PlayerControls :phrase="phrase" @step="activeStep = $event" />
+      <PlayerControls :phrase="phrase" :tempo="tempo" @step="activeStep = $event" />
 
-      <GenerationForm @update:phrase="onGenerated" />
+      <GenerationForm v-model:tempo="tempo" @update:phrase="onGenerated" />
     </div>
   </main>
 </template>
