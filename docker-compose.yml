@@ -1,0 +1,33 @@
+# Drum Pattern Generator — deployment stack (Coolify / docker-compose).
+# frontend (nginx) serves the SPA and proxies /api to the backend on the internal
+# network, so everything is one origin (no CORS). Point your Coolify domain at
+# the frontend service, port 80.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - TZ=${TZ:-UTC}
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - TZ=${TZ:-UTC}
+      # Coolify: auto-assign the public URL to this service on port 80.
+      # (Set the actual domain in the Coolify UI.)
+      - SERVICE_FQDN_FRONTEND_80
+    expose:
+      - "80"
+    # For plain `docker compose up` (no Coolify), publish a host port instead:
+    # ports:
+    #   - "${APP_PORT:-8080}:80"

@@ -35,6 +35,11 @@ docs/
 *.swo
 *~
 
+# Env (real secrets/config; .env.example is committed)
+.env
+.env.local
+.env.*.local
+
 # OS
 .DS_Store
 Thumbs.db
