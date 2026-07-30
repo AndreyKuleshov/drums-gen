@@ -4,11 +4,12 @@ import { ref } from 'vue'
 import GenerationForm from './components/GenerationForm.vue'
 import PlayerControls from './components/PlayerControls.vue'
 import ScoreView from './components/ScoreView.vue'
+import { persistedRef } from './lib/storage'
 import type { Phrase } from './types'
 
 const phrase = ref<Phrase | null>(null)
 const activeStep = ref<number | null>(null)
-const tempo = ref(100)
+const tempo = persistedRef('tempo', 100)
 const booting = ref(false)
 let bootTimer: ReturnType<typeof setTimeout> | null = null
 

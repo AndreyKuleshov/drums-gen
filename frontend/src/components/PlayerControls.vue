@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { persistedRef } from '../lib/storage'
 import {
   parseFraction,
   playMetronome,
@@ -19,14 +20,14 @@ const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
 const clicking = ref(false)
-const metronome = ref(false)
-const loop = ref(false)
-const preroll = ref(false)
-const prerollBars = ref(1)
+const metronome = persistedRef('metronome', false)
+const loop = persistedRef('loop', false)
+const preroll = persistedRef('preroll', false)
+const prerollBars = persistedRef('prerollBars', 1)
 
 // Metronome click subdivision (accents stay on the quarter beats).
-const metroBase = ref('1/4')
-const metroTriplet = ref(false)
+const metroBase = persistedRef('metroBase', '1/4')
+const metroTriplet = persistedRef('metroTriplet', false)
 const metroDivs = [
   { value: '1/4', label: '1/4' },
   { value: '1/8', label: '1/8' },
@@ -42,7 +43,7 @@ const metroSubWhole = computed(() =>
 )
 
 // Metronome volume (0..1), applied live to standalone + overlay clicks.
-const metroVolume = ref(0.75)
+const metroVolume = persistedRef('metroVolume', 0.75)
 watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 
 // Shared subdivision: one setting drives both the overlay click and the
@@ -232,8 +233,9 @@ onBeforeUnmount(() => {
           type="button"
           role="switch"
           :aria-checked="clicking"
+          :aria-label="clicking ? 'Stop metronome' : 'Play metronome on its own'"
           :class="{ 'is-on': clicking }"
-          title="Practice metronome (plays on its own)"
+          title="A practice metronome that plays on its own (stops the pattern)"
           @click="onClickOnly"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -246,7 +248,10 @@ onBeforeUnmount(() => {
               stroke-linecap="round"
             />
           </svg>
-          Metronome
+          <span class="metro-btn__labels">
+            <span class="metro-btn__name">Metronome</span>
+            <span class="metro-btn__sub">{{ clicking ? 'playing…' : 'plays alone' }}</span>
+          </span>
         </button>
 
         <div class="metro-div" role="radiogroup" aria-label="Metronome subdivision">
@@ -491,6 +496,24 @@ onBeforeUnmount(() => {
     color 0.15s ease,
     box-shadow 0.18s ease,
     transform 0.12s ease;
+}
+
+.metro-btn__labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.metro-btn__sub {
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  text-transform: none;
+}
+
+.metro-btn.is-on .metro-btn__sub {
+  color: var(--amber);
 }
 
 .metro-btn:hover {

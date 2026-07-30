@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 
 import { apiUrl } from '../lib/api'
+import { flushSettings, loadSetting, registerPersist, saveSetting } from '../lib/storage'
 import type { Phrase } from '../types'
 import Stepper from './Stepper.vue'
 
@@ -18,14 +19,16 @@ const tempo = computed({
   set: (value: number) => emit('update:tempo', value),
 })
 
-const form = reactive({
+const formDefaults = {
   num: 4,
   den: 4,
   num_bars: 2,
   base: '1/16',
   feel: 'straight',
   accent_mode: 'rudiment',
-})
+}
+const form = reactive({ ...formDefaults, ...loadSetting('form', {}) })
+registerPersist(() => saveSetting('form', { ...form }))
 
 const bases = [
   { value: '1/8', label: '1/8' },
@@ -56,6 +59,8 @@ const loading = ref(false)
 async function submit(): Promise<void> {
   error.value = ''
   loading.value = true
+  // Commit all current settings to localStorage on Generate.
+  flushSettings()
   const subdivision =
     form.feel === 'triplet' ? (TRIPLET_OF[form.base] ?? form.base) : form.base
   try {
