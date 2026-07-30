@@ -109,6 +109,17 @@ button:disabled {
   fill: var(--ink);
 }
 
+/* Rudiment reference mini-staves: same warm ink on their lit panels. */
+.rudstaff svg path,
+.rudstaff svg rect {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+
+.rudstaff svg text {
+  fill: var(--ink);
+}
+
 /* Currently-playing note: lit orange with a soft glow. */
 .score svg g.note-active path,
 .score svg g.note-active rect {
