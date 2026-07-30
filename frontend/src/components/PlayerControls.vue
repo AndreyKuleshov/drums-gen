@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
-import { playMetronome, playPhrase, stopPhrase } from '../lib/audio'
+import { playMetronome, playPhrase, setLoop, setTempo, stopPhrase } from '../lib/audio'
 import type { Phrase } from '../types'
 
 const props = defineProps<{ phrase: Phrase | null; tempo: number }>()
@@ -46,18 +46,19 @@ async function onClickOnly(): Promise<void> {
   await playMetronome({ tempoBpm: props.tempo, num, den })
 }
 
-// Tempo is live: if it changes mid-playback, restart at the new tempo so the
-// change is heard immediately without regenerating.
+// Tempo is live: changing it retimes the running transport without restarting.
 watch(
   () => props.tempo,
-  () => {
-    if (playing.value) void onPlay()
-    else if (clicking.value) {
-      clicking.value = false
-      void onClickOnly()
-    }
+  (bpm) => {
+    if (playing.value || clicking.value) setTempo(bpm)
   },
 )
+
+// Loop can be toggled mid-playback and takes effect immediately.
+function onToggleLoop(): void {
+  loop.value = !loop.value
+  if (playing.value) setLoop(loop.value)
+}
 
 function onStop(): void {
   stopPhrase()
@@ -99,7 +100,7 @@ onBeforeUnmount(() => {
         :aria-checked="loop"
         aria-label="Loop"
         title="Loop the pattern"
-        @click="loop = !loop"
+        @click="onToggleLoop"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path

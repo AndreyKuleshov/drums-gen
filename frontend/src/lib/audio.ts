@@ -67,7 +67,11 @@ export function metronomeTimes(
 let accentNoise: Tone.NoiseSynth | null = null
 let normalNoise: Tone.NoiseSynth | null = null
 let body: Tone.MembraneSynth | null = null
-let click: Tone.MembraneSynth | null = null
+let click: Tone.Synth | null = null
+
+// Metronome beep pitches (Hz): a high blip on the downbeat, lower on other beats.
+const CLICK_DOWN = 2000
+const CLICK_UP = 1200
 
 function getAccentNoise(): Tone.NoiseSynth {
   if (accentNoise === null) {
@@ -118,16 +122,19 @@ function hit(time: number, accent: boolean): void {
   }
 }
 
-function getClick(): Tone.MembraneSynth {
+function getClick(): Tone.Synth {
   if (click === null) {
-    click = new Tone.MembraneSynth({
-      pitchDecay: 0.006,
-      octaves: 4,
-      envelope: { attack: 0.001, decay: 0.04, sustain: 0 },
+    click = new Tone.Synth({
+      oscillator: { type: 'square' },
+      envelope: { attack: 0.0005, decay: 0.03, sustain: 0, release: 0.01 },
     }).toDestination()
-    click.volume.value = -4
+    click.volume.value = -10
   }
   return click
+}
+
+function tick(time: number, down: boolean): void {
+  getClick().triggerAttackRelease(down ? CLICK_DOWN : CLICK_UP, '64n', time, down ? 1 : 0.6)
 }
 
 export interface PlayOptions {
@@ -150,6 +157,12 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   const draw = Tone.getDraw()
   const tempo = opts.tempoBpm ?? phrase.tempo_bpm
 
+  // Events are scheduled in seconds computed at `tempo`, and the transport's bpm
+  // is set to the same value. The transport stores events by tick, so those
+  // ticks land on the musical positions — and changing bpm later (setTempo)
+  // retimes everything live, without restarting.
+  transport.bpm.value = tempo
+
   scheduleTimes(phrase, tempo).forEach((event, index) => {
     transport.schedule((time) => {
       hit(time, event.velocity >= 1)
@@ -158,31 +171,38 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   })
 
   if (opts.metronome) {
-    const c = getClick()
     for (const beat of metronomeTimes(phrase, tempo)) {
-      transport.schedule((time) => {
-        c.triggerAttackRelease(beat.down ? 'C3' : 'G2', '32n', time, beat.down ? 1 : 0.5)
-      }, beat.timeSec)
+      transport.schedule((time) => tick(time, beat.down), beat.timeSec)
     }
   }
 
+  // Always set the loop bounds so Loop can be toggled live mid-playback; whether
+  // it actually loops is just the transport.loop flag.
   const endSec = phraseWholeNotes(phrase) * (240 / tempo)
-  if (opts.loop) {
-    // Repeat forever: the scheduled notes and their draw callbacks re-fire each
-    // cycle, so highlighting loops too. No terminal onEnd — Stop ends it.
-    transport.loop = true
-    transport.loopStart = 0
-    transport.loopEnd = endSec
-  } else {
-    transport.schedule((time) => {
-      draw.schedule(() => {
+  transport.loopStart = 0
+  transport.loopEnd = endSec
+  transport.loop = opts.loop ?? false
+
+  transport.schedule((time) => {
+    draw.schedule(() => {
+      if (!transport.loop) {
         opts.onStep?.(null)
         opts.onEnd?.()
-      }, time)
-    }, endSec)
-  }
+      }
+    }, time)
+  }, endSec)
 
   transport.start()
+}
+
+/** Change playback tempo live (no restart). */
+export function setTempo(bpm: number): void {
+  Tone.getTransport().bpm.value = bpm
+}
+
+/** Toggle looping of the currently-playing pattern live. */
+export function setLoop(enabled: boolean): void {
+  Tone.getTransport().loop = enabled
 }
 
 export function stopPhrase(): void {
@@ -201,15 +221,13 @@ export async function playMetronome(opts: {
   await Tone.start()
   const transport = Tone.getTransport()
   stopPhrase()
-  const c = getClick()
+  transport.bpm.value = opts.tempoBpm
   const wholeNoteSec = 240 / opts.tempoBpm
   const barWhole = opts.num / opts.den
   const beat = beatWholeNotes(opts.num, opts.den)
   for (let t = 0; t + 1e-9 < barWhole; t += beat) {
     const down = t < 1e-9
-    transport.schedule((time) => {
-      c.triggerAttackRelease(down ? 'C3' : 'G2', '32n', time, down ? 1 : 0.5)
-    }, t * wholeNoteSec)
+    transport.schedule((time) => tick(time, down), t * wholeNoteSec)
   }
   transport.loop = true
   transport.loopStart = 0
