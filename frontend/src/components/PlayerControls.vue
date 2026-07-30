@@ -50,12 +50,6 @@ watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 // standalone metronome, and applies live (no restart) to either.
 watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
 
-const meta = computed(() => {
-  if (props.phrase === null) return null
-  const strokes = props.phrase.bars.flatMap((b) => b.strokes)
-  return { bars: props.phrase.bars.length, notes: strokes.length }
-})
-
 async function onPlay(): Promise<void> {
   if (props.phrase === null) return
   clicking.value = false
@@ -224,11 +218,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <dl v-if="meta" class="readout">
-        <div><dt>Tempo</dt><dd>{{ tempo }}<small> BPM</small></dd></div>
-        <div><dt>Bars</dt><dd>{{ meta.bars }}</dd></div>
-        <div><dt>Notes</dt><dd>{{ meta.notes }}</dd></div>
-      </dl>
     </div>
 
     <!-- Standalone metronome — its own module, separate from the pattern -->
@@ -390,22 +379,28 @@ onBeforeUnmount(() => {
   width: 56px;
   height: 56px;
   padding-left: 2px;
-  color: #221204;
-  background: linear-gradient(180deg, var(--amber-bright), var(--amber));
-  border-color: var(--amber-dim);
-  box-shadow: var(--shadow-2), 0 0 22px -6px var(--amber-glow);
+  /* Resting: amber-outlined, not filled — Generate is the sole filled primary. */
+  color: var(--amber-bright);
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  border: 1.5px solid var(--amber-dim);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.18);
 }
 
 .play:hover:not(:disabled) {
-  filter: brightness(1.06);
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-1), 0 0 18px -6px var(--amber-glow);
 }
 
 .play:active:not(:disabled) {
   transform: translateY(1px);
 }
 
+/* Fills solid amber only while actually playing. */
 .play.is-playing {
-  box-shadow: var(--shadow-2), 0 0 28px -2px var(--amber-glow);
+  color: #221204;
+  background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+  border-color: var(--amber-dim);
+  box-shadow: var(--shadow-2), 0 0 26px -3px var(--amber-glow);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -632,41 +627,6 @@ onBeforeUnmount(() => {
   background: var(--amber);
 }
 
-.readout {
-  display: flex;
-  gap: 22px;
-  margin: 0;
-}
-
-.readout div {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-
-.readout dt {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.readout dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 1.02rem;
-  font-weight: 500;
-  color: var(--amber-bright);
-}
-
-.readout dd small {
-  font-size: 0.62rem;
-  color: var(--text-faint);
-  letter-spacing: 0.08em;
-}
-
 @keyframes pulse {
   0%,
   100% {
@@ -702,13 +662,6 @@ onBeforeUnmount(() => {
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
-  }
-  .readout {
-    width: 100%;
-    justify-content: space-around;
-  }
-  .readout div {
-    align-items: center;
   }
 }
 </style>

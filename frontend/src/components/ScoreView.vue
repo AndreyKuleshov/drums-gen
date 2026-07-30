@@ -72,7 +72,10 @@ function render(phrase: Phrase): void {
   const renderer = new Renderer(host, Renderer.Backends.SVG)
   const context = renderer.getContext()
 
-  const lineWidth = host.clientWidth > 2 * MIN_BAR_WIDTH ? host.clientWidth : DEFAULT_LINE_WIDTH
+  // Subtract the container's own horizontal padding so the SVG fits its content
+  // box (otherwise the right edge is clipped by the padding).
+  const avail = host.clientWidth - 20
+  const lineWidth = avail > 2 * MIN_BAR_WIDTH ? avail : DEFAULT_LINE_WIDTH
   const { rows, height } = layoutBars(phrase, lineWidth)
   renderer.resize(lineWidth, height)
   noteEls = []
@@ -115,11 +118,12 @@ function render(phrase: Phrase): void {
     for (const note of notes) noteEls.push(note.getSVGElement())
   }
 
-  // Focal reveal: stagger the notes lighting onto the display (capped total delay).
+  // Focal reveal: a quick left-to-right light-up. Kept short so trailing notes
+  // never linger as faint "ghosts" that read like a rendering glitch.
   noteEls.forEach((el, i) => {
     if (el === undefined) return
     el.classList.add('note-enter')
-    el.style.animationDelay = `${Math.min(i * 16, 420)}ms`
+    el.style.animationDelay = `${Math.min(i * 7, 190)}ms`
   })
 }
 

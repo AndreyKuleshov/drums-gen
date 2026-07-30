@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import GenerationForm from './components/GenerationForm.vue'
 import PlayerControls from './components/PlayerControls.vue'
@@ -10,8 +10,24 @@ import type { Phrase } from './types'
 const phrase = ref<Phrase | null>(null)
 const activeStep = ref<number | null>(null)
 const tempo = persistedRef('tempo', 100)
+const feel = ref('straight')
 const booting = ref(false)
 let bootTimer: ReturnType<typeof setTimeout> | null = null
+
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+
+const summary = computed(() => {
+  const p = phrase.value
+  if (p === null) return null
+  return {
+    meter: `${p.time_sig.num}/${p.time_sig.den}`,
+    grid: p.subdivision,
+    feel: cap(feel.value),
+    accents: cap(p.accent_mode),
+    bars: p.bars.length,
+    notes: p.bars.reduce((n, b) => n + b.strokes.length, 0),
+  }
+})
 
 function onGenerated(next: Phrase): void {
   activeStep.value = null
@@ -50,11 +66,25 @@ function onGenerated(next: Phrase): void {
             </p>
           </div>
         </div>
+
+        <dl v-if="summary" class="specplate" aria-label="Pattern summary">
+          <div><dt>Meter</dt><dd>{{ summary.meter }}</dd></div>
+          <div><dt>Grid</dt><dd>{{ summary.grid }}</dd></div>
+          <div><dt>Feel</dt><dd>{{ summary.feel }}</dd></div>
+          <div><dt>Accents</dt><dd>{{ summary.accents }}</dd></div>
+          <div><dt>Bars</dt><dd>{{ summary.bars }}</dd></div>
+          <div><dt>Notes</dt><dd>{{ summary.notes }}</dd></div>
+          <div><dt>Tempo</dt><dd>{{ tempo }}<small>bpm</small></dd></div>
+        </dl>
       </section>
 
       <PlayerControls :phrase="phrase" :tempo="tempo" @step="activeStep = $event" />
 
-      <GenerationForm v-model:tempo="tempo" @update:phrase="onGenerated" />
+      <GenerationForm
+        v-model:tempo="tempo"
+        @update:phrase="onGenerated"
+        @update:feel="feel = $event"
+      />
     </div>
   </main>
 </template>
@@ -186,6 +216,44 @@ function onGenerated(next: Phrase): void {
       0 0 22px -6px var(--amber-glow);
     filter: brightness(1);
   }
+}
+
+/* Engraved spec plate on the display bezel: what the current pattern is. */
+.specplate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 10px 4px 2px;
+  padding: 8px 4px 0;
+}
+
+.specplate > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.specplate dt {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.specplate dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--amber-bright);
+}
+
+.specplate dd small {
+  margin-left: 3px;
+  font-size: 0.58rem;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
 }
 
 .screen__empty {

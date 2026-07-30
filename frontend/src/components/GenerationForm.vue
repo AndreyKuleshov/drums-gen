@@ -12,6 +12,7 @@ const props = defineProps<{ tempo: number }>()
 const emit = defineEmits<{
   (e: 'update:phrase', phrase: Phrase): void
   (e: 'update:tempo', value: number): void
+  (e: 'update:feel', feel: string): void
 }>()
 
 const tempo = computed({
@@ -53,6 +54,8 @@ const accentModes = [
 // Triplet turns a straight subdivision into its triplet grid (1/8 -> 1/12, 1/16 -> 1/24).
 const TRIPLET_OF: Record<string, string> = { '1/8': '1/12', '1/16': '1/24' }
 
+const feelHint = computed(() => feels.find((f) => f.value === form.feel)?.hint ?? '')
+
 const error = ref('')
 const loading = ref(false)
 
@@ -84,6 +87,7 @@ async function submit(): Promise<void> {
           : `Generation failed (${resp.status}).`
       return
     }
+    emit('update:feel', form.feel)
     emit('update:phrase', (await resp.json()) as Phrase)
   } catch {
     error.value = 'Can’t reach the engine. Is the backend running?'
@@ -151,6 +155,7 @@ async function submit(): Promise<void> {
             {{ opt.label }}
           </button>
         </div>
+        <p class="field__hint">{{ feelHint }}</p>
       </div>
 
       <div class="field field--seg field--wide">
@@ -226,6 +231,12 @@ async function submit(): Promise<void> {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+.field__hint {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
 }
 
 .sig {

@@ -56,7 +56,7 @@ try {
     () => document.querySelectorAll('.score svg path').length > 10,
     { timeout: 8000 },
   )
-  await page.waitForTimeout(150)
+  await page.waitForTimeout(700)
   await page.screenshot({ path: `${OUT}/02-straight.png` })
   const notesAfterFirst = await page.evaluate(
     () => document.querySelectorAll('.score svg path').length,
