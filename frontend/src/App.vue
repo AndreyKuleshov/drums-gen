@@ -5,27 +5,30 @@ import GenerationForm from './components/GenerationForm.vue'
 import PlayerControls from './components/PlayerControls.vue'
 import ScoreView from './components/ScoreView.vue'
 import { persistedRef } from './lib/storage'
-import type { Phrase } from './types'
+import type { PatternConfig, Phrase } from './types'
 
 const phrase = ref<Phrase | null>(null)
 const activeStep = ref<number | null>(null)
 const tempo = persistedRef('tempo', 100)
-const feel = ref('straight')
+const config = ref<PatternConfig | null>(null)
 const booting = ref(false)
 let bootTimer: ReturnType<typeof setTimeout> | null = null
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 
+// The plate always reflects the live form config; Notes appears once generated.
 const summary = computed(() => {
-  const p = phrase.value
-  if (p === null) return null
+  const c = config.value
+  if (c === null) return null
   return {
-    meter: `${p.time_sig.num}/${p.time_sig.den}`,
-    grid: p.subdivision,
-    feel: cap(feel.value),
-    accents: cap(p.accent_mode),
-    bars: p.bars.length,
-    notes: p.bars.reduce((n, b) => n + b.strokes.length, 0),
+    meter: c.meter,
+    grid: c.grid,
+    feel: cap(c.feel),
+    accents: cap(c.accents),
+    bars: c.bars,
+    notes: phrase.value === null
+      ? null
+      : phrase.value.bars.reduce((n, b) => n + b.strokes.length, 0),
   }
 })
 
@@ -73,7 +76,7 @@ function onGenerated(next: Phrase): void {
           <div><dt>Feel</dt><dd>{{ summary.feel }}</dd></div>
           <div><dt>Accents</dt><dd>{{ summary.accents }}</dd></div>
           <div><dt>Bars</dt><dd>{{ summary.bars }}</dd></div>
-          <div><dt>Notes</dt><dd>{{ summary.notes }}</dd></div>
+          <div><dt>Notes</dt><dd>{{ summary.notes ?? '—' }}</dd></div>
           <div><dt>Tempo</dt><dd>{{ tempo }}<small>bpm</small></dd></div>
         </dl>
       </section>
@@ -83,7 +86,7 @@ function onGenerated(next: Phrase): void {
       <GenerationForm
         v-model:tempo="tempo"
         @update:phrase="onGenerated"
-        @update:feel="feel = $event"
+        @update:config="config = $event"
       />
     </div>
   </main>

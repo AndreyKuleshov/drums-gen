@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
 import { apiUrl } from '../lib/api'
 import { flushSettings, loadSetting, registerPersist, saveSetting } from '../lib/storage'
-import type { Phrase } from '../types'
+import type { PatternConfig, Phrase } from '../types'
 import Stepper from './Stepper.vue'
 
 // Tempo lives one level up so it can change playback live, independent of the
@@ -12,7 +12,7 @@ const props = defineProps<{ tempo: number }>()
 const emit = defineEmits<{
   (e: 'update:phrase', phrase: Phrase): void
   (e: 'update:tempo', value: number): void
-  (e: 'update:feel', feel: string): void
+  (e: 'update:config', config: PatternConfig): void
 }>()
 
 const tempo = computed({
@@ -56,6 +56,16 @@ const TRIPLET_OF: Record<string, string> = { '1/8': '1/12', '1/16': '1/24' }
 
 const feelHint = computed(() => feels.find((f) => f.value === form.feel)?.hint ?? '')
 
+// Live config for the summary plate — reflects the current form, updates on change.
+const liveConfig = computed<PatternConfig>(() => ({
+  meter: `${form.num}/${form.den}`,
+  grid: form.feel === 'triplet' ? (TRIPLET_OF[form.base] ?? form.base) : form.base,
+  feel: form.feel,
+  accents: form.accent_mode,
+  bars: form.num_bars,
+}))
+watch(liveConfig, (c) => emit('update:config', c), { immediate: true, deep: true })
+
 const error = ref('')
 const loading = ref(false)
 
@@ -87,7 +97,6 @@ async function submit(): Promise<void> {
           : `Generation failed (${resp.status}).`
       return
     }
-    emit('update:feel', form.feel)
     emit('update:phrase', (await resp.json()) as Phrase)
   } catch {
     error.value = 'Can’t reach the engine. Is the backend running?'

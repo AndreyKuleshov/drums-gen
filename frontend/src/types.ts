@@ -13,6 +13,14 @@ export interface Bar {
   strokes: Stroke[]
 }
 
+export interface PatternConfig {
+  meter: string
+  grid: string
+  feel: string
+  accents: string
+  bars: number
+}
+
 export interface Phrase {
   time_sig: { num: number; den: number }
   tempo_bpm: number
