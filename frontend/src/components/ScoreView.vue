@@ -11,7 +11,7 @@ import {
   StaveNote,
   Tuplet,
 } from 'vexflow'
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { barToNoteSpecs, beamGroups, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
@@ -39,14 +39,24 @@ interface BarLayout {
   firstInRow: boolean
 }
 
-function layoutBars(phrase: Phrase, lineWidth: number): { rows: BarLayout[]; height: number } {
+function layoutBars(
+  phrase: Phrase,
+  lineWidth: number,
+  pxPerNote: number,
+): { rows: BarLayout[]; height: number } {
   const rows: BarLayout[] = []
   let x = LEFT_MARGIN
   let top = TOP
   let firstInRow = true
 
-  const barWidth = (bar: Phrase['bars'][number], first: boolean): number =>
-    Math.max(MIN_BAR_WIDTH, bar.strokes.length * PX_PER_NOTE + (first ? CLEF_TIME_WIDTH : 0))
+  // A bar must never be forced wider than the line (keeps dense bars on-screen
+  // on narrow phones); the clef/time only claim space when they actually fit.
+  const barWidth = (bar: Phrase['bars'][number], first: boolean): number => {
+    const clef = first ? CLEF_TIME_WIDTH : 0
+    const natural = bar.strokes.length * pxPerNote + clef
+    const min = Math.min(MIN_BAR_WIDTH + clef, lineWidth - LEFT_MARGIN * 2)
+    return Math.min(Math.max(min, natural), lineWidth - LEFT_MARGIN * 2)
+  }
 
   for (const bar of phrase.bars) {
     // Wrap to a new row when this bar (as a continuation) would overflow the
@@ -76,7 +86,11 @@ function render(phrase: Phrase): void {
   // box (otherwise the right edge is clipped by the padding).
   const avail = host.clientWidth - 20
   const lineWidth = avail > 2 * MIN_BAR_WIDTH ? avail : DEFAULT_LINE_WIDTH
-  const { rows, height } = layoutBars(phrase, lineWidth)
+  // Shrink note spacing so the densest bar fits the width (portrait phones).
+  const maxNotes = Math.max(1, ...phrase.bars.map((b) => b.strokes.length))
+  const usable = lineWidth - LEFT_MARGIN * 2 - CLEF_TIME_WIDTH
+  const pxPerNote = Math.max(12, Math.min(PX_PER_NOTE, usable / maxNotes))
+  const { rows, height } = layoutBars(phrase, lineWidth, pxPerNote)
   renderer.resize(lineWidth, height)
   noteEls = []
 
@@ -170,12 +184,26 @@ function highlight(index: number | null | undefined): void {
   }
 }
 
+// Re-render on viewport resize / rotation so note spacing re-fits the new width.
+let resizeRaf = 0
+function onResize(): void {
+  if (props.phrase === null) return
+  cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(() => {
+    litEl = undefined
+    if (props.phrase !== null) render(props.phrase)
+  })
+}
+
 // Render on mount (the component is v-if'd in once a phrase exists, so the
 // container is in the DOM here) and on every later phrase change. An immediate
 // watch would fire synchronously before mount, when the container is still null.
 onMounted(() => {
   if (props.phrase !== null) render(props.phrase)
+  window.addEventListener('resize', onResize)
 })
+
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 watch(
   () => props.phrase,
