@@ -110,6 +110,12 @@ function onStop(): void {
   emit('step', null)
 }
 
+// A new (re)generated pattern stops whatever is currently playing.
+watch(
+  () => props.phrase,
+  () => onStop(),
+)
+
 // Spacebar toggles pattern play/stop (ignored while typing in a control).
 function onKeydown(e: KeyboardEvent): void {
   if (e.code !== 'Space') return
