@@ -140,9 +140,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="transport">
-    <div class="transport__buttons">
-      <!-- Pattern transport -->
+  <div class="rack">
+    <!-- Pattern transport -->
+    <div class="transport">
       <div class="cluster">
         <button
           class="play"
@@ -224,34 +224,37 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <span class="divider" aria-hidden="true" />
+      <dl v-if="meta" class="readout">
+        <div><dt>Tempo</dt><dd>{{ tempo }}<small> BPM</small></dd></div>
+        <div><dt>Bars</dt><dd>{{ meta.bars }}</dd></div>
+        <div><dt>Notes</dt><dd>{{ meta.notes }}</dd></div>
+      </dl>
+    </div>
 
-      <!-- Standalone metronome (separate tool: replaces pattern playback) -->
-      <div class="cluster cluster--metro">
+    <!-- Standalone metronome — its own module, separate from the pattern -->
+    <section class="metro-panel" aria-label="Metronome">
+      <span class="metro-panel__title">
+        Metronome
+        <span class="metro-panel__hint">plays on its own · also sets the pattern click</span>
+      </span>
+
+      <div class="metro-panel__controls">
         <button
           class="metro-btn"
           type="button"
           role="switch"
           :aria-checked="clicking"
-          :aria-label="clicking ? 'Stop metronome' : 'Play metronome on its own'"
+          :aria-label="clicking ? 'Stop metronome' : 'Start metronome'"
           :class="{ 'is-on': clicking }"
-          title="A practice metronome that plays on its own (stops the pattern)"
           @click="onClickOnly"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path
-              d="M9 3h6l3 16H6zM12 6.5v8.5M12 15l4-3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
+          <svg v-if="!clicking" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
           </svg>
-          <span class="metro-btn__labels">
-            <span class="metro-btn__name">Metronome</span>
-            <span class="metro-btn__sub">{{ clicking ? 'playing…' : 'plays alone' }}</span>
-          </span>
+          <svg v-else viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
+          </svg>
+          {{ clicking ? 'Stop' : 'Start' }}
         </button>
 
         <div class="metro-div" role="radiogroup" aria-label="Metronome subdivision">
@@ -301,17 +304,17 @@ onBeforeUnmount(() => {
           />
         </label>
       </div>
-    </div>
-
-    <dl v-if="meta" class="readout">
-      <div><dt>Tempo</dt><dd>{{ tempo }}<small> BPM</small></dd></div>
-      <div><dt>Bars</dt><dd>{{ meta.bars }}</dd></div>
-      <div><dt>Notes</dt><dd>{{ meta.notes }}</dd></div>
-    </dl>
+    </section>
   </div>
 </template>
 
 <style scoped>
+.rack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .transport {
   display: flex;
   align-items: center;
@@ -325,24 +328,50 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-2), inset 0 1px 0 rgba(239, 231, 216, 0.05);
 }
 
-.transport__buttons {
+/* Standalone metronome — a recessed sub-module, visually distinct from the
+   raised pattern transport above it. */
+.metro-panel {
   display: flex;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, #171310, var(--chassis));
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--inset);
+}
+
+.metro-panel__title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.metro-panel__hint {
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--text-faint);
+}
+
+.metro-panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .cluster {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.divider {
-  width: 1px;
-  align-self: stretch;
-  min-height: 40px;
-  background: var(--hairline);
 }
 
 .play,
@@ -498,24 +527,6 @@ onBeforeUnmount(() => {
     transform 0.12s ease;
 }
 
-.metro-btn__labels {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
-}
-
-.metro-btn__sub {
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-  text-transform: none;
-}
-
-.metro-btn.is-on .metro-btn__sub {
-  color: var(--amber);
-}
-
 .metro-btn:hover {
   color: var(--text);
 }
@@ -667,25 +678,22 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 560px) {
-  /* Stack the transport into full-width rows so nothing clips off the chassis. */
-  .transport__buttons {
+  /* Stack everything into full-width rows so nothing clips off the chassis. */
+  .transport {
     flex-direction: column;
     align-items: stretch;
-    width: 100%;
-    gap: 14px;
   }
   .cluster {
     justify-content: center;
     flex-wrap: wrap;
   }
-  .cluster--metro {
-    flex-wrap: wrap;
-    gap: 10px;
+  .metro-panel {
+    flex-direction: column;
+    align-items: stretch;
   }
-  .divider {
-    width: 100%;
-    min-height: 1px;
-    height: 1px;
+  .metro-panel__controls {
+    margin-left: 0;
+    justify-content: center;
   }
   .volume {
     flex: 1 1 140px;
