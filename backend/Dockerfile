@@ -13,7 +13,11 @@ COPY pyproject.toml uv.lock ./
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-# Run uvicorn straight from the venv (no runtime re-sync/rebuild).
+# Alembic config + migrations (run on container start).
+COPY alembic.ini ./
+COPY migrations ./migrations
+
+# Run migrations, then uvicorn — straight from the venv (no runtime re-sync).
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-CMD ["uvicorn", "drumgen.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn drumgen.api:app --host 0.0.0.0 --port 8000"]

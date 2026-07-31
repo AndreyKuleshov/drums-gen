@@ -19,9 +19,15 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # The drumgen schema pre-exists on the shared prod instance; create it if
-    # missing (fresh dev DB / offline SQL) — idempotent either way.
-    op.execute("CREATE SCHEMA IF NOT EXISTS drumgen")
+    # Create the schema only if missing. On the shared prod instance it already
+    # exists and the drumgen role lacks CREATE-on-database, so even
+    # `CREATE SCHEMA IF NOT EXISTS` would raise — the guard skips CREATE there.
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM information_schema.schemata "
+        "WHERE schema_name = 'drumgen') THEN EXECUTE 'CREATE SCHEMA drumgen'; "
+        "END IF; END $$;"
+    )
     op.create_table(
         "users",
         sa.Column("id", sa.Uuid(), nullable=False),

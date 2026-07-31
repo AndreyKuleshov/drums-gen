@@ -2,6 +2,10 @@
 # frontend (nginx) serves the SPA and proxies /api to the backend on the internal
 # network, so everything is one origin (no CORS). Point your Coolify domain at
 # the frontend service, port 80.
+#
+# The backend also joins the external `coolify` network to reach the shared
+# Postgres instance (its own `drumgen` schema). Set the secrets below in the
+# Coolify UI / env — see .env.example.
 
 services:
   backend:
@@ -12,6 +16,24 @@ services:
       - "8000"
     environment:
       - TZ=${TZ:-UTC}
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://drums-gen.duckdns.org}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - MEDIA_DIR=${MEDIA_DIR:-/data/media}
+      - EMAIL_ENABLED=${EMAIL_ENABLED:-true}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_STARTTLS=${SMTP_STARTTLS:-true}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Rudiment Engine}
+    volumes:
+      - media:/data/media
+    networks:
+      - default
+      - coolify
 
   frontend:
     build:
@@ -29,3 +51,12 @@ services:
     # For plain `docker compose up` (no Coolify), publish a host port instead:
     # ports:
     #   - "${APP_PORT:-8080}:80"
+
+volumes:
+  media:
+
+networks:
+  # Coolify's predefined network — lets the backend resolve the shared Postgres
+  # instance by its internal hostname. Provisioned by Coolify on the server.
+  coolify:
+    external: true

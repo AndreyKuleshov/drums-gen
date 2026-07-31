@@ -59,7 +59,16 @@ def _configure(connection: Connection) -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
+    # Only CREATE the schema if it's actually missing. On the shared prod
+    # instance the schema pre-exists and the drumgen role lacks CREATE on the
+    # database, so an unconditional `CREATE SCHEMA IF NOT EXISTS` would still
+    # raise "permission denied" — the existence check avoids reaching CREATE.
+    exists = connection.execute(
+        text("SELECT 1 FROM information_schema.schemata WHERE schema_name = :s"),
+        {"s": SCHEMA},
+    ).scalar()
+    if not exists:
+        connection.execute(text(f"CREATE SCHEMA {SCHEMA}"))
     _configure(connection)
     with context.begin_transaction():
         context.run_migrations()
