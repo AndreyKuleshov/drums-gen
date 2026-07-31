@@ -5,13 +5,22 @@ truncating tables (not transaction rollback). The app's `get_session` dependency
 is overridden to point at the throwaway `drumgen_test` database.
 """
 
+import os
+import tempfile
 from collections.abc import AsyncIterator
+
+# Point avatar storage at a throwaway dir before the app reads settings.
+os.environ.setdefault("MEDIA_DIR", tempfile.mkdtemp(prefix="drumgen-media-"))
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from drumgen.api import app
 from drumgen.config import Settings

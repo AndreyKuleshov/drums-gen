@@ -1,3 +1,7 @@
+# Uploaded media (avatars) — local/dev only; prod uses a mounted volume
+backend/media/
+media/
+
 # Python
 __pycache__/
 *.py[cod]

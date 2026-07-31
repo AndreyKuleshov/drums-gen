@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Public base URL used to build links inside emails (verify / reset).
     public_base_url: str = "http://localhost:5173"
 
+    # Avatar uploads: stored on a mounted volume, served back under /media.
+    # In prod this points at the volume mount (e.g. /data/media).
+    media_dir: str = "media"
+    avatar_max_bytes: int = 5 * 1024 * 1024
+
     # Email (generic SMTP adapter — Brevo in prod). When email_enabled is False,
     # messages are logged to the console instead of sent (local dev).
     email_enabled: bool = False

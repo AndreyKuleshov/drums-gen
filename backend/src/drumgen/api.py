@@ -1,15 +1,20 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from drumgen.account.router import router as account_router
 from drumgen.auth.router import router as auth_router
 from drumgen.catalog import MVP_CATALOG
+from drumgen.config import get_settings
 from drumgen.db.engine import engine
 from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
+from drumgen.patterns.router import router as patterns_router
 
 
 @asynccontextmanager
@@ -31,6 +36,14 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(account_router)
+app.include_router(patterns_router)
+
+# Serve uploaded avatars from the media volume. The directory is created up front
+# so the mount doesn't fail on a fresh deploy with an empty volume.
+_media_dir = Path(get_settings().media_dir)
+(_media_dir / "avatars").mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=_media_dir), name="media")
 
 
 @app.exception_handler(GenerationError)
