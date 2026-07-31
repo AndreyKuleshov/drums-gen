@@ -16,19 +16,53 @@ from drumgen.auth.errors import (
     EmailNotVerifiedError,
     InvalidCredentialsError,
     InvalidTokenError,
+    PasswordReusedError,
 )
 from drumgen.auth.security import generate_token, hash_password, hash_token, verify_password
 from drumgen.config import Settings
-from drumgen.db.models import EmailToken, Session, User
+from drumgen.db.models import EmailToken, PasswordHistory, Session, User
 from drumgen.mailer.templates import (
     send_already_registered_email,
     send_password_reset_email,
     send_verification_email,
 )
 
+# A new password may not match any of the last N passwords.
+_PASSWORD_HISTORY_DEPTH = 3
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+async def _recent_password_hashes(session: AsyncSession, user: User) -> list[str]:
+    rows = await session.scalars(
+        select(PasswordHistory)
+        .where(PasswordHistory.user_id == user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(_PASSWORD_HISTORY_DEPTH)
+    )
+    hashes = [row.password_hash for row in rows]
+    # Cover legacy accounts created before history existed.
+    if user.password_hash and user.password_hash not in hashes:
+        hashes.append(user.password_hash)
+    return hashes
+
+
+async def _set_password(session: AsyncSession, user: User, new_password: str) -> None:
+    """Update the password and record it in history, pruning old entries."""
+    existing = list(
+        await session.scalars(
+            select(PasswordHistory)
+            .where(PasswordHistory.user_id == user.id)
+            .order_by(PasswordHistory.created_at.desc())
+        )
+    )
+    # Keep the newest (DEPTH - 1) existing rows; the new one below makes DEPTH.
+    for stale in existing[_PASSWORD_HISTORY_DEPTH - 1 :]:
+        await session.delete(stale)
+    user.password_hash = hash_password(new_password)
+    session.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
 
 
 async def register(
@@ -48,13 +82,10 @@ async def register(
             await _issue_email_token(session, settings, existing, purpose="verify")
         return
 
-    user = User(
-        email=email,
-        password_hash=hash_password(password),
-        display_name=display_name,
-    )
+    user = User(email=email, display_name=display_name)
     session.add(user)
     await session.flush()
+    await _set_password(session, user, password)
     await _issue_email_token(session, settings, user, purpose="verify")
 
 
@@ -162,5 +193,8 @@ async def request_password_reset(session: AsyncSession, settings: Settings, emai
 
 async def reset_password(session: AsyncSession, raw_token: str, new_password: str) -> None:
     user = await _consume_token(session, raw_token, "reset")
-    user.password_hash = hash_password(new_password)
+    # Reject reuse of any recent password (including the current one).
+    if any(verify_password(new_password, h) for h in await _recent_password_hashes(session, user)):
+        raise PasswordReusedError
+    await _set_password(session, user, new_password)
     await session.commit()

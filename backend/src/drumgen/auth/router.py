@@ -8,6 +8,7 @@ from drumgen.auth.errors import (
     EmailNotVerifiedError,
     InvalidCredentialsError,
     InvalidTokenError,
+    PasswordReusedError,
 )
 from drumgen.auth.schemas import ForgotIn, LoginIn, RegisterIn, ResetIn, UserOut, VerifyIn
 from drumgen.config import Settings
@@ -98,4 +99,9 @@ async def reset(body: ResetIn, session: SessionDep) -> dict[str, str]:
         await service.reset_password(session, body.token, body.password)
     except InvalidTokenError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired token") from None
+    except PasswordReusedError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Please choose a password you haven't used recently.",
+        ) from None
     return {"status": "password_reset"}

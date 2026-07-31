@@ -29,9 +29,11 @@ async function submit(): Promise<void> {
     done.value = true
     setTimeout(() => router.push('/login'), 1600)
   } catch (err) {
+    // The backend returns 400 both for a bad token and a reused password; show
+    // its (user-friendly) message so the reason is clear.
     error.value =
       err instanceof ApiError && err.status === 400
-        ? 'This reset link is invalid or has expired.'
+        ? err.message
         : 'Something went wrong. Please try again.'
   } finally {
     busy.value = false

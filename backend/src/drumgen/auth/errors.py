@@ -15,3 +15,7 @@ class EmailNotVerifiedError(AuthError):
 
 class InvalidTokenError(AuthError):
     """A verification / reset token is unknown, consumed, or expired."""
+
+
+class PasswordReusedError(AuthError):
+    """The new password matches one of the user's recent passwords."""

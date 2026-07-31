@@ -99,6 +99,34 @@ async def test_forgot_and_reset(client: AsyncClient, outbox: Outbox) -> None:
     assert fresh.status_code == 200
 
 
+async def _reset(client: AsyncClient, outbox: Outbox, password: str) -> int:
+    await client.post("/auth/forgot", json={"email": _EMAIL})
+    token = token_in(outbox, "/reset")
+    resp = await client.post("/auth/reset", json={"token": token, "password": password})
+    return resp.status_code
+
+
+async def test_password_reuse_blocked_within_last_three(
+    client: AsyncClient, outbox: Outbox
+) -> None:
+    token = await _register(client, outbox)
+    await client.post("/auth/verify", json={"token": token})
+    await client.post("/auth/logout")
+
+    # Reusing the current password is rejected.
+    assert await _reset(client, outbox, _PW) == 400
+    # A fresh password works…
+    assert await _reset(client, outbox, "password-one") == 200
+    # …and reusing that (now current) is rejected.
+    assert await _reset(client, outbox, "password-one") == 400
+    # The original, only one change ago, is still within the window → rejected.
+    assert await _reset(client, outbox, _PW) == 400
+    # After three distinct changes it falls out of the window → allowed again.
+    assert await _reset(client, outbox, "password-two") == 200
+    assert await _reset(client, outbox, "password-three") == 200
+    assert await _reset(client, outbox, _PW) == 200
+
+
 async def test_duplicate_register_does_not_leak(client: AsyncClient, outbox: Outbox) -> None:
     await _register(client, outbox)
     # Second registration with the same email returns the same 202 (no enumeration).
