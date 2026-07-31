@@ -1,15 +1,5 @@
 <script setup lang="ts">
-import {
-  Articulation,
-  Beam,
-  Formatter,
-  GraceNote,
-  GraceNoteGroup,
-  Modifier,
-  Renderer,
-  Stave,
-  StaveNote,
-} from 'vexflow'
+import { Beam, Formatter, GraceNote, GraceNoteGroup, Renderer, Stave, StaveNote } from 'vexflow'
 import { onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -21,31 +11,36 @@ const props = defineProps<{
 
 const host = ref<HTMLDivElement | null>(null)
 
+// Mirrors the generator's ScoreView notation: accents drawn manually as ">"
+// above the stems, and the sticking drawn manually just under each notehead so
+// the letters line up with the notes and the card stays compact (a VexFlow
+// BOTTOM annotation anchors ~100px below the stave, forcing oversized boxes).
 function render(): void {
   const el = host.value
   if (el === null) return
   el.innerHTML = ''
 
   const n = props.sticking.length
+  if (n === 0) return
   const withClef = props.clef !== false
   const totalGrace = props.grace.reduce((a, b) => a + b, 0)
-  const clefW = withClef ? 34 : 6
-  const width = clefW + n * 34 + totalGrace * 12 + 20
-  const height = 72
+
+  const PX_PER_NOTE = 40
+  const clefW = withClef ? 42 : 10
+  const width = clefW + n * PX_PER_NOTE + totalGrace * 14 + 24
 
   const renderer = new Renderer(el, Renderer.Backends.SVG)
-  renderer.resize(width, height)
+  // Provisional height; grown to fit the sticking row once the notes are laid
+  // out (percussion b/4 sits low, so its exact y isn't known until drawn).
+  renderer.resize(width, 110)
   const ctx = renderer.getContext()
 
-  const stave = new Stave(4, 12, width - 8)
+  const stave = new Stave(4, 28, width - 8)
   if (withClef) stave.addClef('percussion')
   stave.setContext(ctx).draw()
 
   const notes = props.sticking.map((_hand, i) => {
     const note = new StaveNote({ keys: ['b/4'], duration: '8' })
-    if (props.accents[i]) {
-      note.addModifier(new Articulation('a>').setPosition(Modifier.Position.ABOVE))
-    }
     const g = props.grace[i]
     if (g > 0) {
       const graces = Array.from(
@@ -62,6 +57,28 @@ function render(): void {
   const beams = n >= 2 ? [new Beam(notes)] : []
   Formatter.FormatAndDraw(ctx, stave, notes)
   beams.forEach((b) => b.setContext(ctx).draw())
+
+  // Accents above the stems (matches the generator's notation).
+  const accentIdx = props.accents.flatMap((a, i) => (a ? [i] : []))
+  if (accentIdx.length > 0) {
+    const stemTop = Math.min(...notes.map((note) => note.getStemExtents().topY))
+    const accentY = stemTop - 14
+    ctx.setFont('Georgia, serif', 15, 'bold')
+    for (const i of accentIdx) {
+      ctx.fillText('>', notes[i].getAbsoluteX() - 3, accentY)
+    }
+  }
+
+  // Sticking just under each notehead, aligned to the note's x.
+  const headY = Math.max(...notes.map((note) => note.getYs()[0]))
+  const stickY = headY + 26
+  ctx.setFont('Georgia, serif', 13, 'normal')
+  props.sticking.forEach((hand, i) => {
+    ctx.fillText(hand, notes[i].getAbsoluteX() - 3, stickY)
+  })
+
+  // Grow the SVG to reveal the sticking row (resize keeps drawn content as-is).
+  renderer.resize(width, Math.ceil(stickY) + 12)
 }
 
 onMounted(render)

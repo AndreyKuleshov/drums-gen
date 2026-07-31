@@ -86,13 +86,6 @@ onMounted(async () => {
             <div class="rudscreen">
               <RudimentStaff :sticking="r.sticking" :accents="r.accents" :grace="r.grace" />
             </div>
-            <p class="stickline" aria-label="Sticking">
-              <span
-                v-for="(hand, i) in r.sticking"
-                :key="i"
-                :class="['stick', { 'stick--accent': r.accents[i] }]"
-              >{{ hand }}</span>
-            </p>
           </li>
         </ul>
       </section>
@@ -214,26 +207,6 @@ onMounted(async () => {
 .rudscreen {
   overflow-x: auto;
   max-width: 100%;
-}
-
-.stickline {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  color: var(--text-dim);
-}
-
-.stick {
-  min-width: 12px;
-  text-align: center;
-}
-
-.stick--accent {
-  color: var(--amber-bright);
-  font-weight: 600;
 }
 
 .legend__text code {
