@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import {
-  Annotation,
-  AnnotationVerticalJustify,
   Articulation,
   Beam,
   Formatter,
@@ -33,21 +31,18 @@ function render(): void {
   const totalGrace = props.grace.reduce((a, b) => a + b, 0)
   const clefW = withClef ? 34 : 6
   const width = clefW + n * 34 + totalGrace * 12 + 20
-  const height = 96
+  const height = 72
 
   const renderer = new Renderer(el, Renderer.Backends.SVG)
   renderer.resize(width, height)
   const ctx = renderer.getContext()
 
-  const stave = new Stave(4, 18, width - 8)
+  const stave = new Stave(4, 12, width - 8)
   if (withClef) stave.addClef('percussion')
   stave.setContext(ctx).draw()
 
-  const notes = props.sticking.map((hand, i) => {
+  const notes = props.sticking.map((_hand, i) => {
     const note = new StaveNote({ keys: ['b/4'], duration: '8' })
-    note.addModifier(
-      new Annotation(hand).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
-    )
     if (props.accents[i]) {
       note.addModifier(new Articulation('a>').setPosition(Modifier.Position.ABOVE))
     }
