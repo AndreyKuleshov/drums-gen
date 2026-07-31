@@ -1,14 +1,5 @@
 <script setup lang="ts">
-import {
-  Beam,
-  Formatter,
-  GraceNote,
-  GraceNoteGroup,
-  Renderer,
-  Stave,
-  StaveNote,
-  Voice,
-} from 'vexflow'
+import { Beam, Formatter, GraceNote, GraceNoteGroup, Renderer, Stave, StaveNote } from 'vexflow'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -47,8 +38,10 @@ function render(): void {
   // Shrink per-note spacing so the staff fits the card; below PX_MIN the
   // .rudscreen wrapper scrolls rather than let notes collide.
   const avail = (el.parentElement?.clientWidth ?? 320) - 2
+  // Leave headroom for the symmetric right margin added post-draw (see below).
+  const budget = avail - 24
   let pxPerNote = PX_MAX
-  if (fixed + n * PX_MAX > avail) pxPerNote = Math.max(PX_MIN, (avail - fixed) / n)
+  if (fixed + n * PX_MAX > budget) pxPerNote = Math.max(PX_MIN, (budget - fixed) / n)
   const width = Math.round(fixed + n * pxPerNote)
 
   const renderer = new Renderer(el, Renderer.Backends.SVG)
@@ -77,15 +70,7 @@ function render(): void {
   })
 
   const beams = n >= 2 ? [new Beam(notes)] : []
-  // Format to a justify width that leaves the same margin after the last note
-  // as before the first, so the notation isn't jammed against the right edge.
-  const voice = new Voice({ num_beats: n, beat_value: 8 }).setStrict(false)
-  voice.addTickables(notes)
-  const startX = stave.getNoteStartX()
-  const leftInset = startX - stave.getX()
-  const justify = Math.max(n * 12, stave.getX() + stave.getWidth() - startX - leftInset)
-  new Formatter().joinVoices([voice]).format([voice], justify)
-  voice.draw(ctx, stave)
+  Formatter.FormatAndDraw(ctx, stave, notes)
   beams.forEach((b) => b.setContext(ctx).draw())
 
   // Accents above the stems (matches the generator's notation).
@@ -111,8 +96,15 @@ function render(): void {
     contentBottom = stickY + 12
   }
 
+  // Make the right margin match the left: VexFlow leaves more space before the
+  // first notehead than after the last, so pad the SVG to the mirror width.
+  const firstBB = notes[0].getBoundingBox()
+  const lastBB = notes[n - 1].getBoundingBox()
+  const leftMargin = firstBB.getX()
+  const finalWidth = Math.ceil(lastBB.getX() + lastBB.getW() + leftMargin)
+
   // Grow the SVG to reveal the full content (resize keeps drawn content as-is).
-  renderer.resize(width, Math.ceil(contentBottom))
+  renderer.resize(Math.max(width, finalWidth), Math.ceil(contentBottom))
 }
 
 let raf = 0
