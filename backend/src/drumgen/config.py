@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     email_from: str = "no-reply@rudiment.local"
     email_from_name: str = "Rudiment Engine"
+    # Dev-only: when email is disabled, also append outgoing messages to this
+    # file (used by local flows / E2E to read the verification link).
+    email_debug_file: str = ""
 
 
 @lru_cache

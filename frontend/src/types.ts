@@ -1,3 +1,12 @@
+export interface User {
+  id: string
+  email: string
+  display_name: string
+  bio: string
+  avatar_url: string | null
+  is_verified: boolean
+}
+
 export interface Stroke {
   duration: string
   hand: 'L' | 'R'

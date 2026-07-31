@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import AuthNav from '../components/AuthNav.vue'
 import GenerationForm from '../components/GenerationForm.vue'
 import PlayerControls from '../components/PlayerControls.vue'
 import ScoreView from '../components/ScoreView.vue'
@@ -58,6 +59,7 @@ function onGenerated(next: Phrase): void {
         <div class="brand__meta">
           <span class="brand__model">RG&#8209;40 · RUDIMENT ENGINE</span>
           <RouterLink to="/rudiments" class="nav-link">Rudiments &rarr;</RouterLink>
+          <AuthNav />
           <span class="led led--on" aria-hidden="true" />
         </div>
       </header>

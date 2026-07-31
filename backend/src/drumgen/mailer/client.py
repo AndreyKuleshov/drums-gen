@@ -24,6 +24,9 @@ async def send_email(
 ) -> None:
     if not settings.email_enabled:
         logger.info("[email:dev] to=%s subject=%s\n%s", to, subject, text)
+        if settings.email_debug_file:
+            with open(settings.email_debug_file, "a", encoding="utf-8") as fh:
+                fh.write(f"TO: {to}\nSUBJECT: {subject}\n{text}\n---\n")
         return
 
     message = EmailMessage()
