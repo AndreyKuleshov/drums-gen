@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Beam, Formatter, GraceNote, GraceNoteGroup, Renderer, Stave, StaveNote } from 'vexflow'
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   sticking: ('L' | 'R')[]
   accents: boolean[]
   grace: number[]
   clef?: boolean
+  // Absent Boolean props resolve to false in Vue, so this is phrased as an
+  // opt-out: sticking shows by default; the legend passes hide-labels.
+  hideLabels?: boolean
 }>()
 
 const host = ref<HTMLDivElement | null>(null)
@@ -15,6 +18,7 @@ const host = ref<HTMLDivElement | null>(null)
 // above the stems, and the sticking drawn manually just under each notehead so
 // the letters line up with the notes and the card stays compact (a VexFlow
 // BOTTOM annotation anchors ~100px below the stave, forcing oversized boxes).
+// Note spacing shrinks to the parent width so a dense rudiment fits its card.
 function render(): void {
   const el = host.value
   if (el === null) return
@@ -23,16 +27,25 @@ function render(): void {
   const n = props.sticking.length
   if (n === 0) return
   const withClef = props.clef !== false
+  const withLabels = !props.hideLabels
   const totalGrace = props.grace.reduce((a, b) => a + b, 0)
 
-  const PX_PER_NOTE = 40
+  const PX_MAX = 40
+  const PX_MIN = 22
   const clefW = withClef ? 42 : 10
-  const width = clefW + n * PX_PER_NOTE + totalGrace * 14 + 24
+  const fixed = clefW + totalGrace * 14 + 24
+
+  // Shrink per-note spacing so the staff fits the card; below PX_MIN the
+  // .rudscreen wrapper scrolls rather than let notes collide.
+  const avail = (el.parentElement?.clientWidth ?? 320) - 2
+  let pxPerNote = PX_MAX
+  if (fixed + n * PX_MAX > avail) pxPerNote = Math.max(PX_MIN, (avail - fixed) / n)
+  const width = Math.round(fixed + n * pxPerNote)
 
   const renderer = new Renderer(el, Renderer.Backends.SVG)
-  // Provisional height; grown to fit the sticking row once the notes are laid
-  // out (percussion b/4 sits low, so its exact y isn't known until drawn).
-  renderer.resize(width, 110)
+  // Provisional height; grown to fit the content once the notes are laid out
+  // (percussion b/4 sits low, so its exact y isn't known until drawn).
+  renderer.resize(width, 120)
   const ctx = renderer.getContext()
 
   const stave = new Stave(4, 28, width - 8)
@@ -69,19 +82,33 @@ function render(): void {
     }
   }
 
-  // Sticking just under each notehead, aligned to the note's x.
-  const headY = Math.max(...notes.map((note) => note.getYs()[0]))
-  const stickY = headY + 26
-  ctx.setFont('Georgia, serif', 13, 'normal')
-  props.sticking.forEach((hand, i) => {
-    ctx.fillText(hand, notes[i].getAbsoluteX() - 3, stickY)
-  })
+  const headY = Math.max(...notes.map((note) => note.getStemExtents().baseY))
+  let contentBottom = headY + 16
+  if (withLabels) {
+    // Sticking just under each notehead, aligned to the note's x.
+    const stickY = headY + 22
+    ctx.setFont('Georgia, serif', 13, 'normal')
+    props.sticking.forEach((hand, i) => {
+      ctx.fillText(hand, notes[i].getAbsoluteX() - 3, stickY)
+    })
+    contentBottom = stickY + 12
+  }
 
-  // Grow the SVG to reveal the sticking row (resize keeps drawn content as-is).
-  renderer.resize(width, Math.ceil(stickY) + 12)
+  // Grow the SVG to reveal the full content (resize keeps drawn content as-is).
+  renderer.resize(width, Math.ceil(contentBottom))
 }
 
-onMounted(render)
+let raf = 0
+function scheduleRender(): void {
+  cancelAnimationFrame(raf)
+  raf = requestAnimationFrame(render)
+}
+
+onMounted(() => {
+  render()
+  window.addEventListener('resize', scheduleRender)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', scheduleRender))
 watch(() => props.sticking, render, { deep: true })
 </script>
 

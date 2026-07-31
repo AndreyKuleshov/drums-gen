@@ -55,15 +55,15 @@ onMounted(async () => {
 
       <ul class="legend">
         <li class="legend__item">
-          <RudimentStaff :sticking="['R']" :accents="[true]" :grace="[0]" :clef="false" />
+          <RudimentStaff :sticking="['R']" :accents="[true]" :grace="[0]" :clef="false" hide-labels />
           <span class="legend__text">Accent — <code>&gt;</code> above the note</span>
         </li>
         <li class="legend__item">
-          <RudimentStaff :sticking="['R']" :accents="[false]" :grace="[1]" :clef="false" />
+          <RudimentStaff :sticking="['R']" :accents="[false]" :grace="[1]" :clef="false" hide-labels />
           <span class="legend__text">Flam — one grace note</span>
         </li>
         <li class="legend__item">
-          <RudimentStaff :sticking="['R']" :accents="[false]" :grace="[2]" :clef="false" />
+          <RudimentStaff :sticking="['R']" :accents="[false]" :grace="[2]" :clef="false" hide-labels />
           <span class="legend__text">Drag — two grace notes</span>
         </li>
       </ul>
