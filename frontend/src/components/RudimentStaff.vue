@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { Beam, Formatter, GraceNote, GraceNoteGroup, Renderer, Stave, StaveNote } from 'vexflow'
+import {
+  Beam,
+  Formatter,
+  GraceNote,
+  GraceNoteGroup,
+  Renderer,
+  Stave,
+  StaveNote,
+  Voice,
+} from 'vexflow'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -68,7 +77,15 @@ function render(): void {
   })
 
   const beams = n >= 2 ? [new Beam(notes)] : []
-  Formatter.FormatAndDraw(ctx, stave, notes)
+  // Format to a justify width that leaves the same margin after the last note
+  // as before the first, so the notation isn't jammed against the right edge.
+  const voice = new Voice({ num_beats: n, beat_value: 8 }).setStrict(false)
+  voice.addTickables(notes)
+  const startX = stave.getNoteStartX()
+  const leftInset = startX - stave.getX()
+  const justify = Math.max(n * 12, stave.getX() + stave.getWidth() - startX - leftInset)
+  new Formatter().joinVoices([voice]).format([voice], justify)
+  voice.draw(ctx, stave)
   beams.forEach((b) => b.setContext(ctx).draw())
 
   // Accents above the stems (matches the generator's notation).
