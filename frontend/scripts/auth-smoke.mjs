@@ -90,7 +90,7 @@ try {
   await page.screenshot({ path: `${OUT}/03-account.png` })
 
   // Log out, then log back in.
-  await page.getByRole('button', { name: 'Smoke Tester' }).click()
+  await page.locator('.authnav__trigger').click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await page.waitForURL(`http://localhost:${FRONT}/`, { timeout: 8000 })
 
@@ -101,15 +101,64 @@ try {
   await page.waitForURL('**/account', { timeout: 8000 })
   await page.screenshot({ path: `${OUT}/04-relogin.png` })
 
+  // --- Phase 2: like a pattern, then manage it in the account ---------------
+  // Generate a pattern and save it.
+  await page.goto(`http://localhost:${FRONT}/`, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await page.waitForFunction(() => document.querySelectorAll('.score svg path').length > 5, {
+    timeout: 8000,
+  })
+  await page.getByRole('button', { name: 'Save', exact: false }).click()
+  await page.getByText('Saved', { exact: true }).waitFor({ timeout: 8000 })
+  await page.screenshot({ path: `${OUT}/05-liked.png` })
+
+  // Favorite shows up in the account.
+  await page.goto(`http://localhost:${FRONT}/account`, { waitUntil: 'networkidle' })
+  await page.locator('.fave').first().waitFor({ timeout: 8000 })
+  const favCount = await page.locator('.fave').count()
+
+  // Edit profile (name + bio).
+  await page.locator('#dn').fill('Renamed Drummer')
+  await page.locator('#bio').fill('I practice paradiddles at dawn.')
+  await page.getByRole('button', { name: 'Save profile' }).click()
+  await page.getByText('Saved', { exact: true }).waitFor({ timeout: 8000 })
+
+  // Upload an avatar (a small generated PNG).
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  )
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'avatar.png',
+    mimeType: 'image/png',
+    buffer: png,
+  })
+  await page.locator('.profile__avatar img').waitFor({ timeout: 8000 })
+  await page.screenshot({ path: `${OUT}/06-profile.png` })
+
+  // Open the favorite back in the generator.
+  await page.getByRole('button', { name: 'Open in generator' }).first().click()
+  await page.waitForURL(`http://localhost:${FRONT}/`, { timeout: 8000 })
+  await page.waitForFunction(() => document.querySelectorAll('.score svg path').length > 5, {
+    timeout: 8000,
+  })
+  await page.screenshot({ path: `${OUT}/07-reopened.png` })
+
+  // Remove the favorite.
+  await page.goto(`http://localhost:${FRONT}/account`, { waitUntil: 'networkidle' })
+  await page.locator('.fave').first().waitFor({ timeout: 8000 })
+  await page.getByRole('button', { name: 'Remove' }).first().click()
+  await page.getByText('No saved patterns yet', { exact: false }).waitFor({ timeout: 8000 })
+
   // Guard: hitting /account after logout should bounce to /login.
-  await page.getByRole('button', { name: 'Smoke Tester' }).click()
+  await page.locator('.authnav__trigger').click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await page.waitForURL(`http://localhost:${FRONT}/`, { timeout: 8000 })
   await page.goto(`http://localhost:${FRONT}/account`, { waitUntil: 'networkidle' })
   const guardedTo = new URL(page.url()).pathname
 
   await browser.close()
-  console.log(JSON.stringify({ ok: true, email, guardedTo, errors }, null, 2))
+  console.log(JSON.stringify({ ok: true, email, favCount, guardedTo, errors }, null, 2))
 } catch (e) {
   console.log(JSON.stringify({ ok: false, error: String(e) }))
   process.exitCode = 1

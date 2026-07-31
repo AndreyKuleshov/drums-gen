@@ -38,10 +38,13 @@ async function readError(resp: Response): Promise<string> {
  * non-2xx response; returns the parsed body (or undefined for 204).
  */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // FormData sets its own multipart Content-Type (with boundary) — don't force JSON.
+  const isForm = init.body instanceof FormData
+  const baseHeaders: Record<string, string> = isForm ? {} : { 'Content-Type': 'application/json' }
   const resp = await fetch(apiUrl(path), {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
     ...init,
+    headers: { ...baseHeaders, ...(init.headers ?? {}) },
   })
   if (!resp.ok) throw new ApiError(resp.status, await readError(resp))
   if (resp.status === 204) return undefined as T

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
 import GenerationForm from '../components/GenerationForm.vue'
+import LikeButton from '../components/LikeButton.vue'
 import PlayerControls from '../components/PlayerControls.vue'
 import ScoreView from '../components/ScoreView.vue'
+import { takePendingPhrase } from '../lib/loadedPattern'
 import { persistedRef } from '../lib/storage'
 import type { PatternConfig, Phrase } from '../types'
 
@@ -36,6 +38,22 @@ const summary = computed(() => {
   }
 })
 
+// Display summary saved alongside a liked pattern (rendered in the account page).
+const likeMeta = computed<Record<string, unknown>>(() => {
+  const s = summary.value
+  if (s === null) return { tempo: tempo.value }
+  return {
+    level: s.level,
+    meter: s.meter,
+    grid: s.grid,
+    feel: s.feel,
+    accents: s.accents,
+    bars: s.bars,
+    notes: s.notes,
+    tempo: tempo.value,
+  }
+})
+
 function onGenerated(next: Phrase): void {
   activeStep.value = null
   phrase.value = next
@@ -46,6 +64,12 @@ function onGenerated(next: Phrase): void {
     bootTimer = setTimeout(() => (booting.value = false), 600)
   })
 }
+
+// A favorite opened from the account page is loaded straight onto the screen.
+onMounted(() => {
+  const pending = takePendingPhrase()
+  if (pending !== null) onGenerated(pending)
+})
 </script>
 
 <template>
@@ -66,6 +90,7 @@ function onGenerated(next: Phrase): void {
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass" :class="{ 'screen__glass--boot': booting }">
+          <LikeButton v-if="phrase" class="screen__like" :phrase="phrase" :meta="likeMeta" />
           <ScoreView v-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <span class="screen__empty-glyph" aria-hidden="true">&#9833;</span>
@@ -120,6 +145,13 @@ function onGenerated(next: Phrase): void {
   overflow: hidden;
   display: flex;
   align-items: center;
+}
+
+.screen__like {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
 }
 
 .screen__glass--boot {
