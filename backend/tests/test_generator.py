@@ -248,4 +248,5 @@ def test_pro_uses_flams_and_drags():
             saw_flam = True
         if any(s.grace == 2 for s in strokes):
             saw_drag = True
-    assert saw_flam and saw_drag
+    assert saw_flam
+    assert saw_drag

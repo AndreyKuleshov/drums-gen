@@ -7,6 +7,7 @@ FRONTEND_PORT ?= 5173
 
 .PHONY: help install install-backend install-frontend \
         dev dev-backend dev-frontend \
+        db-dev-up db-dev-down migrate \
         test test-backend test-frontend \
         lint lint-backend lint-frontend \
         check clean
@@ -60,6 +61,17 @@ lint-backend: ## ruff + pyright (strict)
 
 lint-frontend: ## vue-tsc typecheck
 	cd $(FRONTEND_DIR) && npm run typecheck
+
+## ---------- database (local dev) ----------
+
+db-dev-up: ## Start the local dev Postgres (port 55432)
+	docker compose -f docker-compose.dev.yml up -d
+
+db-dev-down: ## Stop the local dev Postgres (keeps the data volume)
+	docker compose -f docker-compose.dev.yml down
+
+migrate: ## Apply DB migrations (alembic upgrade head)
+	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
 ## ---------- combined ----------
 

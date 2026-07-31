@@ -1,20 +1,36 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from drumgen.auth.router import router as auth_router
 from drumgen.catalog import MVP_CATALOG
+from drumgen.db.engine import engine
 from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
 
-app = FastAPI(title="Drum Pattern Generator")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+    yield
+    await engine.dispose()
+
+
+app = FastAPI(title="Drum Pattern Generator", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    # Any localhost port (dev servers vary): 5173, 5180, etc.
+    # Any localhost port (dev servers vary): 5173, 5180, etc. Credentials are
+    # allowed so the session cookie flows when the SPA calls cross-origin in dev.
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 
 @app.exception_handler(GenerationError)
