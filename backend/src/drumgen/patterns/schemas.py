@@ -9,11 +9,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from drumgen.db.models import LikedPattern
-from drumgen.domain.models import Phrase
 
 
 class LikeIn(BaseModel):
-    phrase: Phrase
+    # Opaque saved content — either an exercise Phrase or a Groove. It is stored
+    # verbatim as JSONB and rendered client-side by `meta.kind`; the server does
+    # not need to re-validate its musical shape.
+    phrase: dict[str, Any]
     meta: dict[str, Any] = Field(default_factory=dict)
     title: str | None = Field(default=None, max_length=120)
 

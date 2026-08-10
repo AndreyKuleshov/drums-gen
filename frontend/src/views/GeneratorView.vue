@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import AuthNav from '../components/AuthNav.vue'
 import GenerationForm from '../components/GenerationForm.vue'
 import LikeButton from '../components/LikeButton.vue'
+import ModeSwitch from '../components/ModeSwitch.vue'
 import PlayerControls from '../components/PlayerControls.vue'
 import ScoreView from '../components/ScoreView.vue'
 import { takePendingPhrase } from '../lib/loadedPattern'
@@ -78,10 +79,10 @@ onMounted(() => {
       <header class="console__head">
         <div class="brand">
           <span class="brand__mark" aria-hidden="true">RG</span>
-          <span class="brand__name">Drum Pattern Generator</span>
+          <span class="brand__name">Rudiment Exercises</span>
         </div>
         <div class="brand__meta">
-          <span class="brand__model">RG&#8209;40 · RUDIMENT ENGINE</span>
+          <ModeSwitch />
           <RouterLink to="/rudiments" class="nav-link">Rudiments &rarr;</RouterLink>
           <AuthNav />
           <span class="led led--on" aria-hidden="true" />
@@ -90,7 +91,13 @@ onMounted(() => {
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass" :class="{ 'screen__glass--boot': booting }">
-          <LikeButton v-if="phrase" class="screen__like" :phrase="phrase" :meta="likeMeta" />
+          <LikeButton
+            v-if="phrase"
+            class="screen__like"
+            :payload="phrase"
+            :meta="{ ...likeMeta, kind: 'exercise' }"
+            next="/exercises"
+          />
           <ScoreView v-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <span class="screen__empty-glyph" aria-hidden="true">&#9833;</span>

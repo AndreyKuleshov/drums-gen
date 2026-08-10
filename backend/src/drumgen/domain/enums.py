@@ -18,6 +18,9 @@ class Articulation(StrEnum):
 
 class Surface(StrEnum):
     SNARE = "snare"
+    HIHAT = "hihat"
+    HIHAT_OPEN = "hihat_open"
+    KICK = "kick"
 
 
 class AccentMode(StrEnum):

@@ -1,12 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
-import GeneratorView from '../views/GeneratorView.vue'
+import PatternView from '../views/PatternView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'generator', component: GeneratorView },
+    { path: '/', name: 'pattern', component: PatternView },
+    {
+      path: '/exercises',
+      name: 'exercises',
+      component: () => import('../views/GeneratorView.vue'),
+    },
     {
       path: '/rudiments',
       name: 'rudiments',

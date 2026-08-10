@@ -4,9 +4,12 @@ import { useRouter } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
 import { likePattern } from '../lib/patterns'
-import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase; meta: Record<string, unknown> }>()
+const props = defineProps<{
+  payload: unknown
+  meta: Record<string, unknown>
+  next?: string
+}>()
 
 const router = useRouter()
 const { isAuthenticated } = useAuth()
@@ -15,7 +18,7 @@ const state = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
 // A fresh generation resets the button to its unsaved state.
 watch(
-  () => props.phrase,
+  () => props.payload,
   () => {
     state.value = 'idle'
   },
@@ -23,13 +26,13 @@ watch(
 
 async function onClick(): Promise<void> {
   if (!isAuthenticated.value) {
-    await router.push({ name: 'login', query: { next: '/', reason: 'save' } })
+    await router.push({ name: 'login', query: { next: props.next ?? '/', reason: 'save' } })
     return
   }
   if (state.value === 'saving' || state.value === 'saved') return
   state.value = 'saving'
   try {
-    await likePattern(props.phrase, props.meta)
+    await likePattern(props.payload, props.meta)
     state.value = 'saved'
   } catch {
     state.value = 'error'
