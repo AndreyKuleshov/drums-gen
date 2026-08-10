@@ -113,7 +113,9 @@ function chip(fave: LikedPattern, key: string): string | null {
         </div>
       </header>
 
-      <section v-if="user" class="account">
+      <p v-if="!user" class="muted account__loading">Loading your account…</p>
+
+      <section v-else class="account">
         <!-- Profile editor -->
         <div class="card">
           <h2 class="card__title">Profile</h2>
@@ -197,7 +199,10 @@ function chip(fave: LikedPattern, key: string): string | null {
               <div class="fave__meta">
                 <span v-for="k in ['level', 'meter', 'feel', 'bars', 'tempo']" :key="k">
                   <template v-if="chip(fave, k)">
-                    <span class="fave__chip">{{ chip(fave, k) }}{{ k === 'tempo' ? ' bpm' : '' }}</span>
+                    <span class="fave__chip"
+                      >{{ chip(fave, k)
+                      }}{{ k === 'tempo' ? ' bpm' : k === 'bars' ? ' bars' : '' }}</span
+                    >
                   </template>
                 </span>
               </div>
@@ -256,6 +261,10 @@ function chip(fave: LikedPattern, key: string): string | null {
   margin: 0;
   color: var(--text-dim);
   font-size: 0.9rem;
+}
+
+.account__loading {
+  padding: 24px 4px;
 }
 
 .profile {
@@ -332,7 +341,7 @@ function chip(fave: LikedPattern, key: string): string | null {
 }
 
 .profile__ok {
-  color: #9fd68a;
+  color: var(--amber-bright);
   font-size: 0.85rem;
 }
 

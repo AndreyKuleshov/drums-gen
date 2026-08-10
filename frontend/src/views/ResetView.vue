@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AuthCard from '../components/AuthCard.vue'
+import PasswordField from '../components/PasswordField.vue'
 import { ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -19,10 +20,6 @@ const token = typeof route.query.token === 'string' ? route.query.token : ''
 
 async function submit(): Promise<void> {
   error.value = ''
-  if (password.value.length < 8) {
-    error.value = 'Password must be at least 8 characters.'
-    return
-  }
   busy.value = true
   try {
     await reset(token, password.value)
@@ -49,21 +46,21 @@ async function submit(): Promise<void> {
     </p>
   </AuthCard>
 
-  <AuthCard v-else-if="!done" title="Set a new password">
+  <AuthCard
+    v-else-if="!done"
+    title="Set a new password"
+    subtitle="Choose a new password for your account."
+  >
     <form class="authform" @submit.prevent="submit">
       <p v-if="error" class="formmsg formmsg--error" role="alert">{{ error }}</p>
-      <div class="field">
-        <label class="field__label" for="password">New password</label>
-        <input
-          id="password"
-          v-model="password"
-          class="field__input"
-          type="password"
-          autocomplete="new-password"
-          minlength="8"
-          required
-        />
-      </div>
+      <PasswordField
+        id="password"
+        v-model="password"
+        label="New password"
+        autocomplete="new-password"
+        :minlength="8"
+        hint="At least 8 characters, and not one of your last 3 passwords."
+      />
       <button class="btn-primary" type="submit" :disabled="busy">
         {{ busy ? 'Saving…' : 'Save password' }}
       </button>

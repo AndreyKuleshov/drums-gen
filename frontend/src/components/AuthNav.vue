@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
@@ -8,6 +8,47 @@ const router = useRouter()
 const { user, isAuthenticated, ready, logout } = useAuth()
 
 const open = ref(false)
+const menu = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+
+function close(returnFocus = true): void {
+  open.value = false
+  if (returnFocus) trigger.value?.focus()
+}
+
+function onDocPointer(e: MouseEvent): void {
+  const t = e.target as Node
+  if (!menu.value?.contains(t) && !trigger.value?.contains(t)) open.value = false
+}
+
+// Roving focus across menu items with the arrow keys; Escape closes and
+// returns focus to the trigger.
+function onMenuKeydown(e: KeyboardEvent): void {
+  const items = Array.from(
+    menu.value?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+  )
+  const i = items.indexOf(document.activeElement as HTMLElement)
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    close()
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    items[(i + 1) % items.length]?.focus()
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    items[(i - 1 + items.length) % items.length]?.focus()
+  }
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    document.addEventListener('pointerdown', onDocPointer)
+    void nextTick(() => menu.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus())
+  } else {
+    document.removeEventListener('pointerdown', onDocPointer)
+  }
+})
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointer))
 
 async function signOut(): Promise<void> {
   open.value = false
@@ -29,6 +70,7 @@ function initials(name: string): string {
 
     <div v-else class="authnav__menu">
       <button
+        ref="trigger"
         class="authnav__trigger"
         type="button"
         :aria-expanded="open"
@@ -44,8 +86,20 @@ function initials(name: string): string {
         <span class="authnav__name">{{ user?.display_name }}</span>
       </button>
 
-      <div v-if="open" class="authnav__pop" role="menu" @click="open = false">
-        <RouterLink to="/account" class="authnav__item" role="menuitem">Account</RouterLink>
+      <div
+        v-if="open"
+        ref="menu"
+        class="authnav__pop"
+        role="menu"
+        @keydown="onMenuKeydown"
+      >
+        <RouterLink
+          to="/account"
+          class="authnav__item"
+          role="menuitem"
+          @click="close(false)"
+          >Account</RouterLink
+        >
         <button class="authnav__item" type="button" role="menuitem" @click="signOut">
           Sign out
         </button>
@@ -68,7 +122,8 @@ function initials(name: string): string {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px 5px 5px;
+  min-height: 40px;
+  padding: 5px 12px 5px 5px;
   border-radius: 999px;
   border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised), var(--panel));

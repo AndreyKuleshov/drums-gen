@@ -23,7 +23,7 @@ watch(
 
 async function onClick(): Promise<void> {
   if (!isAuthenticated.value) {
-    await router.push({ name: 'login', query: { next: '/' } })
+    await router.push({ name: 'login', query: { next: '/', reason: 'save' } })
     return
   }
   if (state.value === 'saving' || state.value === 'saved') return
@@ -40,9 +40,15 @@ async function onClick(): Promise<void> {
 <template>
   <button
     class="like"
-    :class="{ 'like--saved': state === 'saved' }"
+    :class="{ 'like--saved': state === 'saved', 'like--error': state === 'error' }"
     type="button"
-    :title="isAuthenticated ? 'Save to favorites' : 'Sign in to save'"
+    :title="
+      state === 'error'
+        ? 'Couldn\'t save — tap to retry'
+        : isAuthenticated
+          ? 'Save to favorites'
+          : 'Sign in to save'
+    "
     :aria-pressed="state === 'saved'"
     @click="onClick"
   >
@@ -51,8 +57,14 @@ async function onClick(): Promise<void> {
         d="M12 21s-7.5-4.6-10-9.2C.4 8.6 1.6 5.2 4.8 4.3c2-.6 3.9.3 5 1.9 1.1-1.6 3-2.5 5-1.9 3.2.9 4.4 4.3 2.8 7.5C19.5 16.4 12 21 12 21z"
       />
     </svg>
-    <span class="like__label">{{
-      state === 'saved' ? 'Saved' : state === 'saving' ? 'Saving…' : 'Save'
+    <span class="like__label" role="status" aria-live="polite">{{
+      state === 'saved'
+        ? 'Saved'
+        : state === 'saving'
+          ? 'Saving…'
+          : state === 'error'
+            ? 'Retry'
+            : 'Save'
     }}</span>
   </button>
 </template>
@@ -100,5 +112,22 @@ async function onClick(): Promise<void> {
 .like--saved .like__heart {
   fill: var(--amber);
   stroke: var(--amber);
+}
+
+.like--error {
+  color: var(--danger);
+  border-color: rgba(255, 107, 94, 0.55);
+}
+
+.like--error:hover {
+  color: var(--danger);
+}
+
+.like--error .like__heart {
+  stroke: var(--danger);
+}
+
+.like {
+  min-height: 40px;
 }
 </style>

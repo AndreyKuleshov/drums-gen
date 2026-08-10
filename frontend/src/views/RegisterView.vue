@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AuthCard from '../components/AuthCard.vue'
+import PasswordField from '../components/PasswordField.vue'
 import { useAuth } from '../lib/auth'
 
 const { register } = useAuth()
@@ -13,13 +14,10 @@ const password = ref('')
 const error = ref('')
 const busy = ref(false)
 const done = ref(false)
+const resent = ref(false)
 
 async function submit(): Promise<void> {
   error.value = ''
-  if (password.value.length < 8) {
-    error.value = 'Password must be at least 8 characters.'
-    return
-  }
   busy.value = true
   try {
     await register(email.value.trim(), password.value, name.value.trim())
@@ -29,6 +27,13 @@ async function submit(): Promise<void> {
   } finally {
     busy.value = false
   }
+}
+
+async function resend(): Promise<void> {
+  // The backend re-issues a fresh verification link for an unverified account.
+  resent.value = false
+  await register(email.value.trim(), password.value, name.value.trim())
+  resent.value = true
 }
 </script>
 
@@ -50,6 +55,7 @@ async function submit(): Promise<void> {
           type="text"
           autocomplete="nickname"
           maxlength="80"
+          placeholder="e.g. Buddy Rich"
           required
         />
       </div>
@@ -62,22 +68,19 @@ async function submit(): Promise<void> {
           class="field__input"
           type="email"
           autocomplete="email"
+          placeholder="you@example.com"
           required
         />
       </div>
 
-      <div class="field">
-        <label class="field__label" for="password">Password</label>
-        <input
-          id="password"
-          v-model="password"
-          class="field__input"
-          type="password"
-          autocomplete="new-password"
-          minlength="8"
-          required
-        />
-      </div>
+      <PasswordField
+        id="password"
+        v-model="password"
+        label="Password"
+        autocomplete="new-password"
+        :minlength="8"
+        hint="At least 8 characters."
+      />
 
       <button class="btn-primary" type="submit" :disabled="busy">
         {{ busy ? 'Creating…' : 'Create account' }}
@@ -94,9 +97,20 @@ async function submit(): Promise<void> {
       We sent a confirmation link to <strong>{{ email }}</strong>. Click it to verify your
       email and finish signing up.
     </p>
+    <p v-if="resent" class="formmsg formmsg--ok" role="status">Link re-sent — check again.</p>
     <p class="authfoot">
       Didn't get it? Check spam, or
-      <RouterLink to="/register" class="authlink" @click="done = false">try again</RouterLink>.
+      <button class="authlink authlink--btn" type="button" @click="resend">resend the link</button>.
     </p>
   </AuthCard>
 </template>
+
+<style scoped>
+.authlink--btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+</style>

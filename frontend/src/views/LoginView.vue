@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AuthCard from '../components/AuthCard.vue'
+import PasswordField from '../components/PasswordField.vue'
 import { ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -11,6 +12,11 @@ const router = useRouter()
 const { login } = useAuth()
 
 const next = typeof route.query.next === 'string' ? route.query.next : '/account'
+// Context when bounced here from a gated action (e.g. saving a pattern).
+const subtitle =
+  route.query.reason === 'save'
+    ? 'Sign in to save that pattern to your favorites.'
+    : 'Welcome back to the rudiment engine.'
 
 const email = ref('')
 const password = ref('')
@@ -38,7 +44,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <AuthCard title="Sign in" subtitle="Welcome back to the rudiment engine.">
+  <AuthCard title="Sign in" :subtitle="subtitle">
     <form class="authform" @submit.prevent="submit">
       <p v-if="error" class="formmsg formmsg--error" role="alert">{{ error }}</p>
 
@@ -50,21 +56,17 @@ async function submit(): Promise<void> {
           class="field__input"
           type="email"
           autocomplete="email"
+          placeholder="you@example.com"
           required
         />
       </div>
 
-      <div class="field">
-        <label class="field__label" for="password">Password</label>
-        <input
-          id="password"
-          v-model="password"
-          class="field__input"
-          type="password"
-          autocomplete="current-password"
-          required
-        />
-      </div>
+      <PasswordField
+        id="password"
+        v-model="password"
+        label="Password"
+        autocomplete="current-password"
+      />
 
       <button class="btn-primary" type="submit" :disabled="busy">
         {{ busy ? 'Signing in…' : 'Sign in' }}

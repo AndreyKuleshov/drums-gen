@@ -224,6 +224,7 @@ button:disabled {
 .led {
   width: 9px;
   height: 9px;
+  flex: none;
   border-radius: 50%;
   background: var(--amber-dim);
 }
@@ -318,6 +319,7 @@ textarea.field__input {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 44px;
   padding: 11px 16px;
   border-radius: var(--r-md);
   border: 1px solid var(--amber-dim);
@@ -363,10 +365,51 @@ textarea.field__input {
   border: 1px solid rgba(255, 107, 94, 0.4);
 }
 
+/* Success stays in the amber world (no off-brand green). */
 .formmsg--ok {
-  color: #d8f0c9;
-  background: rgba(120, 200, 120, 0.1);
-  border: 1px solid rgba(120, 200, 120, 0.34);
+  color: var(--amber-bright);
+  background: rgba(255, 157, 60, 0.1);
+  border: 1px solid rgba(255, 157, 60, 0.34);
+}
+
+/* Small helper text under a field (e.g. password rules). */
+.field__hint {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+/* Input + reveal-toggle wrapper (show/hide password). */
+.field__control {
+  position: relative;
+  display: flex;
+}
+
+.field__control .field__input {
+  padding-right: 62px;
+}
+
+.field__reveal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.field__reveal:hover {
+  color: var(--amber-bright);
 }
 
 .authfoot {
@@ -384,6 +427,34 @@ textarea.field__input {
 
 .authlink:hover {
   text-decoration: underline;
+}
+
+/* Narrow screens: drop the long model tag so the header stays one clean row
+   (and the amber LED never gets clipped against the panel edge), and grow
+   tap targets. */
+@media (max-width: 560px) {
+  .brand__model {
+    display: none;
+  }
+
+  .brand__meta {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .nav-link {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  .authfoot {
+    line-height: 2.4;
+  }
+
+  .authlink {
+    padding: 6px 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -29,7 +29,8 @@ onMounted(async () => {
 
 <template>
   <AuthCard title="Confirming email">
-    <p v-if="state === 'working'" class="formmsg" style="color: var(--text-dim)">
+    <p v-if="state === 'working'" class="verifying">
+      <span class="verifying__spinner" aria-hidden="true" />
       Verifying your link…
     </p>
 
@@ -51,3 +52,37 @@ onMounted(async () => {
     </template>
   </AuthCard>
 </template>
+
+<style scoped>
+.verifying {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 12px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.verifying__spinner {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--edge);
+  border-top-color: var(--amber);
+  animation: verify-spin 0.7s linear infinite;
+}
+
+@keyframes verify-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verifying__spinner {
+    animation-duration: 1.6s;
+  }
+}
+</style>

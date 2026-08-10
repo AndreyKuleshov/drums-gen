@@ -38,6 +38,7 @@ async function submit(): Promise<void> {
           class="field__input"
           type="email"
           autocomplete="email"
+          placeholder="you@example.com"
           required
         />
       </div>
