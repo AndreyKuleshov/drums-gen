@@ -175,7 +175,9 @@ function render(): void {
     const handsVoice = mk(hands)
     const feetVoice = mk(feet)
 
-    const groups = [new VFraction(1, bar.time_sig.den)]
+    // Beam eighths/sixteenths in quarter-note groups (standard notation), so
+    // runs beam cleanly in any meter instead of one flag per note.
+    const groups = [new VFraction(1, 4)]
     const beams = [
       ...Beam.generateBeams(hands, { groups, stem_direction: 1, maintain_stem_directions: true }),
       ...Beam.generateBeams(feet, { groups, stem_direction: -1, maintain_stem_directions: true }),

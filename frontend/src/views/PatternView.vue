@@ -20,7 +20,6 @@ const loop = persistedRef('pattern-loop', false)
 const tempo = persistedRef('pattern-tempo', 100)
 const error = ref('')
 
-const dens = [4, 8, 16]
 const difficulties = [
   { value: 'beginner', label: 'Beginner', hint: 'Kick on 1 & 3, eighth-note hi-hat, backbeat snare' },
   { value: 'mid', label: 'Mid', hint: 'Syncopated kick, ghost notes, an open hi-hat' },
@@ -29,6 +28,7 @@ const difficulties = [
 
 const defaults = { num: 4, den: 4, num_bars: 2, difficulty: 'beginner' }
 const form = reactive({ ...defaults, ...loadSetting('pattern-form', {}) })
+form.den = 4 // meter is always some number of quarters (N/4)
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 const difficultyLabel = computed(
@@ -179,18 +179,7 @@ onBeforeUnmount(stop)
             <div class="meter">
               <Stepper v-model="form.num" :min="1" :max="16" label="Beats per bar" />
               <span class="meter__slash">/</span>
-              <div class="seg seg--sm">
-                <button
-                  v-for="d in dens"
-                  :key="d"
-                  type="button"
-                  class="seg__opt"
-                  :class="{ 'seg__opt--on': form.den === d }"
-                  @click="form.den = d"
-                >
-                  {{ d }}
-                </button>
-              </div>
+              <span class="meter__den">4</span>
             </div>
           </div>
 
@@ -394,6 +383,20 @@ onBeforeUnmount(stop)
 .meter__slash {
   color: var(--text-faint);
   font-family: var(--font-mono);
+}
+
+.meter__den {
+  display: inline-grid;
+  place-items: center;
+  min-width: 40px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: #100e0c;
+  box-shadow: var(--inset);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
 }
 
 .seg {
