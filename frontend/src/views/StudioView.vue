@@ -223,7 +223,10 @@ onMounted(() => {
     phrase.value = p
   }
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKey)
+  if (bootTimer !== null) clearTimeout(bootTimer)
+})
 </script>
 
 <template>

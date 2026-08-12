@@ -61,7 +61,7 @@ function decompose(cells: number): { code: string; dots: number }[] {
   const out: { code: string; dots: number }[] = []
   let rem = cells
   while (rem > 0) {
-    const t = TABLE.find(([c]) => c <= rem) ?? [1, '16', 0]
+    const t = TABLE.find(([c]) => c <= rem) ?? [1, '32', 0]
     out.push({ code: t[1], dots: t[2] })
     rem -= t[0]
   }
@@ -421,7 +421,10 @@ onMounted(() => {
   render()
   window.addEventListener('resize', onResize)
 })
-onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  cancelAnimationFrame(raf)
+})
 watch(() => props.groove, render, { deep: true })
 watch(() => props.activeStep, (i) => highlight(i ?? null))
 </script>

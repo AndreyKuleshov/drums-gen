@@ -1,17 +1,23 @@
-/** Full-kit groove playback: one Tone.Player per voice, scheduled on the shared
- * transport. Velocity (accent / ghost) is applied via a per-voice gain at the
- * scheduled time. */
+/** Full-kit groove playback. Each hit is a one-shot ToneBufferSource through a
+ * per-hit gain (velocity), so overlapping same-voice hits — a double-pedal kick
+ * burst, a 32nd tom run, a flam's grace + main — layer instead of cutting each
+ * other off (a single shared Player per voice would retrigger and choke). */
 import * as Tone from 'tone'
 
 import { parseFraction, scheduleMetro, setOverlayClick } from './audio'
 import type { Groove, Hit, Surface } from '../types'
 
-interface Voice {
-  player: Tone.Player
-  gain: Tone.Gain
+const SAMPLE_FILES: Record<Surface, string> = {
+  kick: 'kick.wav',
+  snare: 'snare.wav',
+  hihat: 'hihat.wav',
+  hihat_open: 'hihat-open.wav',
+  tom_high: 'tom-high.wav',
+  tom_mid: 'tom-mid.wav',
+  tom_low: 'tom-low.wav',
 }
 
-let voices: Record<Surface, Voice> | null = null
+let buffers: Record<Surface, Tone.ToneAudioBuffer> | null = null
 
 // Bump this when the sample files change so browsers don't serve a stale cached
 // .wav (JS reloads on deploy, but the audio files are cached aggressively).
@@ -20,27 +26,38 @@ function sampleUrl(name: string): string {
   return `${import.meta.env.BASE_URL}samples/${name}?v=${SAMPLE_VERSION}`
 }
 
-function makeVoice(file: string): Voice {
-  const gain = new Tone.Gain(1).toDestination()
-  const player = new Tone.Player(sampleUrl(file)).connect(gain)
-  return { player, gain }
-}
-
-/** Create the players once and resolve when every sample buffer is loaded. */
-async function ensureLoaded(): Promise<Record<Surface, Voice>> {
-  if (voices === null) {
-    voices = {
-      kick: makeVoice('kick.wav'),
-      snare: makeVoice('snare.wav'),
-      hihat: makeVoice('hihat.wav'),
-      hihat_open: makeVoice('hihat-open.wav'),
-      tom_high: makeVoice('tom-high.wav'),
-      tom_mid: makeVoice('tom-mid.wav'),
-      tom_low: makeVoice('tom-low.wav'),
-    }
+/** Load every sample buffer once and resolve when all are ready. */
+async function ensureLoaded(): Promise<Record<Surface, Tone.ToneAudioBuffer>> {
+  if (buffers === null) {
+    buffers = Object.fromEntries(
+      (Object.keys(SAMPLE_FILES) as Surface[]).map((s) => [
+        s,
+        new Tone.ToneAudioBuffer(sampleUrl(SAMPLE_FILES[s])),
+      ]),
+    ) as Record<Surface, Tone.ToneAudioBuffer>
   }
   await Tone.loaded()
-  return voices
+  return buffers
+}
+
+/** Fire one hit (polyphonic, self-disposing) at the given transport time. */
+function playHit(buf: Tone.ToneAudioBuffer, time: number, vel: number): void {
+  if (!buf.loaded) return
+  try {
+    const gain = new Tone.Gain(vel).toDestination()
+    const src = new Tone.ToneBufferSource(buf).connect(gain)
+    src.onended = (): void => {
+      try {
+        src.dispose()
+        gain.dispose()
+      } catch {
+        // already disposed
+      }
+    }
+    src.start(time)
+  } catch {
+    // benign retrigger at an identical instant; skip.
+  }
 }
 
 function velocity(hit: Hit): number {
@@ -112,29 +129,15 @@ export async function playGroove(groove: Groove, opts: GroovePlayOptions = {}): 
     const barLen = barWholeNotes(bar.time_sig.num, bar.time_sig.den)
     for (const hit of [...bar.hands, ...bar.feet]) {
       const timeSec = prerollSec + (elapsed + parseFraction(hit.onset)) * wholeNoteSec
-      const voice = kit[hit.surface]
+      const buf = kit[hit.surface]
       const vel = velocity(hit)
       // Flam (1) / drag (2): soft quick grace hits just before the main note.
       const graces = hit.articulation === 'drag' ? 2 : hit.articulation === 'flam' ? 1 : 0
       for (let k = 0; k < graces; k++) {
         const graceTime = Math.max(0, timeSec - (graces - k) * 0.035)
-        transport.schedule((time) => {
-          try {
-            voice.gain.gain.setValueAtTime(0.32, time)
-            voice.player.start(time)
-          } catch {
-            // benign retrigger; skip.
-          }
-        }, graceTime)
+        transport.schedule((time) => playHit(buf, time, 0.32), graceTime)
       }
-      transport.schedule((time) => {
-        try {
-          voice.gain.gain.setValueAtTime(vel, time)
-          voice.player.start(time)
-        } catch {
-          // benign retrigger at an identical instant; skip.
-        }
-      }, timeSec)
+      transport.schedule((time) => playHit(buf, time, vel), timeSec)
     }
     elapsed += barLen
   }
