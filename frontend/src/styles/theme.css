@@ -120,14 +120,18 @@ button:disabled {
   fill: var(--ink);
 }
 
-/* Currently-playing note: lit orange with a soft glow. */
+/* Currently-playing note: lit orange with a soft glow. Applies to both the
+   rudiment score (.score) and the full-kit groove score (.groovescore). */
 .score svg g.note-active path,
-.score svg g.note-active rect {
+.score svg g.note-active rect,
+.groovescore svg g.note-active path,
+.groovescore svg g.note-active rect {
   fill: #e2560f;
   stroke: #e2560f;
 }
 
-.score svg g.note-active {
+.score svg g.note-active,
+.groovescore svg g.note-active {
   filter: drop-shadow(0 0 6px rgba(226, 86, 15, 0.55));
 }
 
@@ -463,5 +467,143 @@ textarea.field__input {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Themed tooltip: [data-tip] shows a dark amber-outlined bubble on hover /
+   keyboard focus, matching the console instead of the OS default. Works on
+   aria-disabled controls too (unlike native title on :disabled). ---- */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 7px 11px;
+  border-radius: var(--r-sm);
+  background: #0b0908;
+  border: 1px solid var(--amber-dim);
+  color: var(--amber-bright);
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--shadow-2), 0 0 0 1px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+  z-index: 40;
+}
+
+/* Little pointer under the bubble. */
+[data-tip]::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg) translateY(4px);
+  background: #0b0908;
+  border-right: 1px solid var(--amber-dim);
+  border-bottom: 1px solid var(--amber-dim);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+  z-index: 40;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after,
+[data-tip]:hover::before,
+[data-tip]:focus-visible::before {
+  opacity: 1;
+  transition-delay: 0.12s;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+[data-tip]:hover::before,
+[data-tip]:focus-visible::before {
+  transform: translateX(-50%) rotate(45deg) translateY(0);
+}
+
+/* Tooltip below the control instead of above (for top-row items that would clip). */
+[data-tip][data-tip-pos='below']::after {
+  bottom: auto;
+  top: calc(100% + 9px);
+  transform: translateX(-50%) translateY(-4px);
+}
+[data-tip][data-tip-pos='below']::before {
+  bottom: auto;
+  top: calc(100% + 4px);
+  border: none;
+  border-left: 1px solid var(--amber-dim);
+  border-top: 1px solid var(--amber-dim);
+  transform: translateX(-50%) rotate(45deg) translateY(-4px);
+}
+[data-tip][data-tip-pos='below']:hover::after,
+[data-tip][data-tip-pos='below']:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
+}
+[data-tip][data-tip-pos='below']:hover::before,
+[data-tip][data-tip-pos='below']:focus-visible::before {
+  transform: translateX(-50%) rotate(45deg) translateY(0);
+}
+
+/* Left-anchor for edge controls whose centered bubble would overhang the card. */
+[data-tip][data-tip-align='left']::after {
+  left: 0;
+  transform: translateX(0) translateY(4px);
+}
+[data-tip][data-tip-align='left'][data-tip-pos='below']::after {
+  transform: translateX(0) translateY(-4px);
+}
+[data-tip][data-tip-align='left']:hover::after,
+[data-tip][data-tip-align='left']:focus-visible::after {
+  transform: translateX(0) translateY(0);
+}
+[data-tip][data-tip-align='left']::before {
+  left: 20px;
+}
+
+/* ---- Mobile ---- */
+/* Touch devices don't hover — drop the tooltips entirely (also declutters small
+   screens where the bubble has no room). */
+@media (hover: none), (max-width: 560px) {
+  [data-tip]::after,
+  [data-tip]::before {
+    content: none;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Header: stack brand over a tidy left-aligned wrapping meta row instead of the
+     desktop space-between that scatters links across ragged rows. */
+  .console__head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .brand__meta {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px 10px;
+  }
+  .nav-link {
+    padding: 6px 10px;
+    font-size: 0.62rem;
   }
 }

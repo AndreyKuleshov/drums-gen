@@ -17,7 +17,7 @@ async def like_pattern(body: LikeIn, user: CurrentUser, session: SessionDep) -> 
     row = LikedPattern(
         user_id=user.id,
         title=body.title,
-        phrase=body.phrase.model_dump(mode="json"),
+        phrase=body.phrase,
         meta=body.meta,
     )
     session.add(row)

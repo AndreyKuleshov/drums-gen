@@ -51,3 +51,35 @@ export interface Phrase {
   accent_mode: string
   bars: Bar[]
 }
+
+export type Surface =
+  | 'snare'
+  | 'hihat'
+  | 'hihat_open'
+  | 'kick'
+  | 'tom_high'
+  | 'tom_mid'
+  | 'tom_low'
+
+export interface Hit {
+  onset: string
+  duration: string
+  surface: Surface
+  hand: 'L' | 'R' | null
+  accent: boolean
+  ghost: boolean
+  articulation: string
+}
+
+export interface GrooveBar {
+  time_sig: { num: number; den: number }
+  hands: Hit[]
+  feet: Hit[]
+}
+
+export interface Groove {
+  time_sig: { num: number; den: number }
+  tempo_bpm: number
+  subdivision: string
+  bars: GrooveBar[]
+}

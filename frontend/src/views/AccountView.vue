@@ -3,12 +3,16 @@ import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
+import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
 import { ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { setPendingPhrase } from '../lib/loadedPattern'
+import { setPendingGroove, setPendingPhrase } from '../lib/loadedPattern'
 import { listLiked, unlikePattern, updateProfile, uploadAvatar } from '../lib/patterns'
 import type { LikedPattern } from '../lib/patterns'
+import type { Groove, Phrase } from '../types'
+
+const isPattern = (fave: LikedPattern): boolean => fave.meta.kind === 'pattern'
 
 const router = useRouter()
 const { user, setUser } = useAuth()
@@ -87,7 +91,12 @@ async function remove(id: string): Promise<void> {
 }
 
 async function openInGenerator(fave: LikedPattern): Promise<void> {
-  setPendingPhrase(fave.phrase)
+  // One page decides its mode from whichever pending pattern is set.
+  if (isPattern(fave)) {
+    setPendingGroove(fave.phrase as Groove)
+  } else {
+    setPendingPhrase(fave.phrase as Phrase)
+  }
   await router.push('/')
 }
 
@@ -194,7 +203,8 @@ function chip(fave: LikedPattern, key: string): string | null {
           <ul v-else class="faves">
             <li v-for="fave in favorites" :key="fave.id" class="fave">
               <div class="fave__screen">
-                <ScoreView :phrase="fave.phrase" />
+                <GrooveScore v-if="isPattern(fave)" :groove="(fave.phrase as Groove)" />
+                <ScoreView v-else :phrase="(fave.phrase as Phrase)" />
               </div>
               <div class="fave__meta">
                 <span v-for="k in ['level', 'meter', 'feel', 'bars', 'tempo']" :key="k">

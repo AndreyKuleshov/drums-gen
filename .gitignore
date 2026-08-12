@@ -50,3 +50,6 @@ Thumbs.db
 
 .claude
 .impeccable
+
+# Local synth-sample backups (unused by the app)
+frontend/public/samples/*-s.wav

@@ -1,23 +1,24 @@
 /** API calls for liked patterns and profile edits. */
 import { apiFetch } from './api'
-import type { Phrase, User } from '../types'
+import type { User } from '../types'
 
 export interface LikedPattern {
   id: string
   title: string | null
-  phrase: Phrase
+  /** Either an exercise Phrase or a Groove; rendered by `meta.kind`. */
+  phrase: unknown
   meta: Record<string, unknown>
   created_at: string
 }
 
 export function likePattern(
-  phrase: Phrase,
+  payload: unknown,
   meta: Record<string, unknown>,
   title?: string,
 ): Promise<LikedPattern> {
   return apiFetch<LikedPattern>('/patterns/like', {
     method: 'POST',
-    body: JSON.stringify({ phrase, meta, title: title ?? null }),
+    body: JSON.stringify({ phrase: payload, meta, title: title ?? null }),
   })
 }
 

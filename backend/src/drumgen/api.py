@@ -12,8 +12,10 @@ from drumgen.auth.router import router as auth_router
 from drumgen.catalog import MVP_CATALOG
 from drumgen.config import get_settings
 from drumgen.db.engine import engine
+from drumgen.domain.groove import Groove
 from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
+from drumgen.groove_generator import GrooveRequest, generate_groove
 from drumgen.patterns.router import router as patterns_router
 
 
@@ -54,6 +56,11 @@ async def generation_error_handler(_request: Request, exc: GenerationError) -> J
 @app.post("/generate", response_model=Phrase)
 def post_generate(req: GenerateRequest) -> Phrase:
     return generate(req)
+
+
+@app.post("/pattern/generate", response_model=Groove)
+def post_generate_pattern(req: GrooveRequest) -> Groove:
+    return generate_groove(req)
 
 
 _FILLER_RUDIMENTS = frozenset({"single", "double"})
