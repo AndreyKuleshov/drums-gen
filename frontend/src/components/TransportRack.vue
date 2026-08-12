@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { persistedRef } from '../lib/storage'
 import {
   parseFraction,
   playMetronome,
-  playPhrase,
   setLoop,
   setMetroSub,
   setMetronomeVolume,
@@ -13,19 +12,41 @@ import {
   setTempo,
   stopPhrase,
 } from '../lib/audio'
-import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase | null; tempo: number }>()
+/** Playback options common to both engines (rudiment phrase + full-kit groove). */
+export interface PlayOpts {
+  metronome: boolean
+  loop: boolean
+  tempoBpm: number
+  prerollBars: number
+  onStep: (index: number | null) => void
+  onEnd: () => void
+}
+export interface PlayEngine {
+  play: (opts: PlayOpts) => Promise<void>
+  stop: () => void
+}
+
+const props = defineProps<{
+  /** Whether there is content to play (a generated phrase/groove). */
+  canPlay: boolean
+  /** Current meter, for the standalone metronome bar length. */
+  meter: { num: number; den: number }
+  /** Live playback tempo (BPM). */
+  tempo: number
+  /** The mode's playback engine — play(opts) / stop(). */
+  engine: PlayEngine
+}>()
 const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
 const clicking = ref(false)
+// Metronome + transport prefs are shared across modes (one source of truth).
 const metronome = persistedRef('metronome', false)
 const loop = persistedRef('loop', false)
 const preroll = persistedRef('preroll', false)
 const prerollBars = persistedRef('prerollBars', 1)
 
-// Metronome click subdivision (accents stay on the quarter beats).
 const metroBase = persistedRef('metroBase', '1/4')
 const metroTriplet = persistedRef('metroTriplet', false)
 const metroDivs = [
@@ -33,8 +54,6 @@ const metroDivs = [
   { value: '1/8', label: '1/8' },
   { value: '1/16', label: '1/16' },
 ]
-// Triplet subdivides a beat into 3 — only meaningful for 1/8 and 1/16. A quarter
-// is the beat itself, so triplet does not apply to it.
 const TRIPLET_OF: Record<string, string> = { '1/8': '1/12', '1/16': '1/24' }
 const canTriplet = computed(() => metroBase.value !== '1/4')
 const metroTripletOn = computed(() => metroTriplet.value && canTriplet.value)
@@ -42,19 +61,15 @@ const metroSubWhole = computed(() =>
   parseFraction(metroTripletOn.value ? TRIPLET_OF[metroBase.value] : metroBase.value),
 )
 
-// Metronome volume (0..1), applied live to standalone + overlay clicks.
 const metroVolume = persistedRef('metroVolume', 0.75)
 watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
-
-// Shared subdivision: one setting drives both the overlay click and the
-// standalone metronome, and applies live (no restart) to either.
 watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
 
 async function onPlay(): Promise<void> {
-  if (props.phrase === null) return
+  if (!props.canPlay) return
   clicking.value = false
   playing.value = true
-  await playPhrase(props.phrase, {
+  await props.engine.play({
     metronome: metronome.value,
     loop: loop.value,
     tempoBpm: props.tempo,
@@ -70,9 +85,7 @@ async function startMetronome(): Promise<void> {
   playing.value = false
   emit('step', null)
   clicking.value = true
-  const num = props.phrase?.time_sig.num ?? 4
-  const den = props.phrase?.time_sig.den ?? 4
-  await playMetronome({ tempoBpm: props.tempo, num, den })
+  await playMetronome({ tempoBpm: props.tempo, num: props.meter.num, den: props.meter.den })
 }
 
 function onClickOnly(): void {
@@ -81,7 +94,6 @@ function onClickOnly(): void {
   else void startMetronome()
 }
 
-// Tempo is live: changing it retimes the running transport without restarting.
 watch(
   () => props.tempo,
   (bpm) => {
@@ -89,68 +101,51 @@ watch(
   },
 )
 
-// Loop can be toggled mid-playback and takes effect immediately.
 function onToggleLoop(): void {
   loop.value = !loop.value
   if (playing.value) setLoop(loop.value)
 }
 
-// The overlay click can be toggled mid-playback without restarting.
 function onToggleClick(): void {
   metronome.value = !metronome.value
   if (playing.value) setOverlayClick(metronome.value)
 }
 
-
 function onStop(): void {
-  stopPhrase()
+  props.engine.stop()
   playing.value = false
   clicking.value = false
   emit('step', null)
 }
 
-// A new (re)generated pattern stops whatever is currently playing.
-watch(
-  () => props.phrase,
-  () => onStop(),
-)
-
-// Spacebar toggles pattern play/stop (ignored while typing in a control).
-function onKeydown(e: KeyboardEvent): void {
-  if (e.code !== 'Space') return
-  const tag = (e.target as HTMLElement | null)?.tagName
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return
-  if (props.phrase === null) return
-  e.preventDefault()
+function onToggle(): void {
   if (playing.value) onStop()
   else void onPlay()
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+// The parent (StudioView) owns the keyboard shortcuts and drives these.
+defineExpose({ toggle: onToggle, stop: onStop, toggleLoop: onToggleLoop, toggleClick: onToggleClick })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  stopPhrase()
-})
+onBeforeUnmount(() => stopPhrase())
 </script>
 
 <template>
   <div class="rack">
-    <!-- Pattern transport -->
     <div class="transport">
       <div class="cluster">
         <button
           class="play"
           :class="{ 'is-playing': playing }"
-          :disabled="phrase === null"
+          :disabled="!canPlay"
           :aria-label="playing ? 'Playing' : 'Play'"
+          data-tip="Play / Stop (Space)" data-tip-pos="below" data-tip-align="left"
           @click="onPlay"
         >
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
           </svg>
         </button>
-        <button class="stop" :disabled="!playing" aria-label="Stop" @click="onStop">
+        <button class="stop" :disabled="!playing" aria-label="Stop" data-tip="Stop (Space)" data-tip-pos="below" @click="onStop">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
             <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
           </svg>
@@ -162,7 +157,7 @@ onBeforeUnmount(() => {
           :class="{ 'is-on': loop }"
           :aria-checked="loop"
           aria-label="Loop the pattern"
-          title="Loop the pattern"
+          data-tip="Loop (R)" data-tip-pos="below"
           @click="onToggleLoop"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -183,7 +178,7 @@ onBeforeUnmount(() => {
           role="switch"
           :aria-checked="metronome"
           :class="{ 'is-on': metronome }"
-          title="Add a metronome click over the pattern"
+          data-tip="Click (C)" data-tip-pos="below"
           @click="onToggleClick"
         >
           <span class="toggle__led" aria-hidden="true" />
@@ -197,7 +192,7 @@ onBeforeUnmount(() => {
             role="switch"
             :aria-checked="preroll"
             :class="{ 'is-on': preroll }"
-            title="Count-in bars of metronome before the pattern starts"
+            data-tip="Count-in before playback" data-tip-pos="below"
             @click="preroll = !preroll"
           >
             <span class="toggle__led" aria-hidden="true" />
@@ -218,10 +213,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-
     </div>
 
-    <!-- Standalone metronome — its own module, separate from the pattern -->
     <section class="metro-panel" aria-label="Metronome">
       <span class="metro-panel__title">
         Metronome
@@ -237,7 +230,7 @@ onBeforeUnmount(() => {
           :aria-label="clicking ? 'Stop metronome' : 'Start metronome'"
           :disabled="playing"
           :class="{ 'is-on': clicking }"
-          title="Practice metronome — available when the pattern isn't playing"
+          data-tip="Practice metronome"
           @click="onClickOnly"
         >
           <svg v-if="!clicking" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -267,14 +260,14 @@ onBeforeUnmount(() => {
             :aria-checked="metroTripletOn"
             :disabled="!canTriplet"
             :class="['metro-div__btn', 'metro-div__trip', { 'is-active': metroTripletOn }]"
-            title="Triplet subdivision (eighth/sixteenth only)"
+            data-tip="Triplet subdivision"
             @click="metroTriplet = !metroTriplet"
           >
             T
           </button>
         </div>
 
-        <label class="volume" title="Metronome volume">
+        <label class="volume" data-tip="Metronome volume">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
             <path
               d="M4 9v6h4l5 4V5L8 9zM16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12"
@@ -320,8 +313,6 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-2), inset 0 1px 0 rgba(239, 231, 216, 0.05);
 }
 
-/* Standalone metronome — a recessed sub-module, visually distinct from the
-   raised pattern transport above it. */
 .metro-panel {
   display: flex;
   align-items: center;
@@ -382,7 +373,6 @@ onBeforeUnmount(() => {
   width: 56px;
   height: 56px;
   padding-left: 2px;
-  /* Resting: amber-outlined, not filled — Generate is the sole filled primary. */
   color: var(--amber-bright);
   background: linear-gradient(180deg, var(--raised-hi), var(--raised));
   border: 1.5px solid var(--amber-dim);
@@ -398,7 +388,6 @@ onBeforeUnmount(() => {
   transform: translateY(1px);
 }
 
-/* Fills solid amber only while actually playing. */
 .play.is-playing {
   color: #221204;
   background: linear-gradient(180deg, var(--amber-bright), var(--amber));
@@ -457,7 +446,6 @@ onBeforeUnmount(() => {
   filter: saturate(0.4) brightness(0.7);
 }
 
-/* "Click" overlay toggle (part of the pattern transport) */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -504,7 +492,6 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-/* Standalone metronome (its own tool) */
 .metro-btn {
   display: inline-flex;
   align-items: center;
@@ -541,7 +528,6 @@ onBeforeUnmount(() => {
 .metro-btn.is-on {
   color: var(--amber-bright);
   box-shadow: var(--shadow-1), 0 0 16px -5px var(--amber-glow), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
-  /* Gentle pulse so a running standalone metronome has a visual presence. */
   animation: metro-pulse 1.4s ease-in-out infinite;
 }
 
@@ -646,7 +632,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 560px) {
-  /* Stack everything into full-width rows so nothing clips off the chassis. */
   .transport {
     flex-direction: column;
     align-items: stretch;

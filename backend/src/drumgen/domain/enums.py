@@ -21,6 +21,9 @@ class Surface(StrEnum):
     HIHAT = "hihat"
     HIHAT_OPEN = "hihat_open"
     KICK = "kick"
+    TOM_HIGH = "tom_high"
+    TOM_MID = "tom_mid"
+    TOM_LOW = "tom_low"
 
 
 class AccentMode(StrEnum):

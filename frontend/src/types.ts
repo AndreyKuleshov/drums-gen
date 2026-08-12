@@ -52,7 +52,14 @@ export interface Phrase {
   bars: Bar[]
 }
 
-export type Surface = 'snare' | 'hihat' | 'hihat_open' | 'kick'
+export type Surface =
+  | 'snare'
+  | 'hihat'
+  | 'hihat_open'
+  | 'kick'
+  | 'tom_high'
+  | 'tom_mid'
+  | 'tom_low'
 
 export interface Hit {
   onset: string

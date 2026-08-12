@@ -91,13 +91,13 @@ async function remove(id: string): Promise<void> {
 }
 
 async function openInGenerator(fave: LikedPattern): Promise<void> {
+  // One page decides its mode from whichever pending pattern is set.
   if (isPattern(fave)) {
     setPendingGroove(fave.phrase as Groove)
-    await router.push('/')
   } else {
     setPendingPhrase(fave.phrase as Phrase)
-    await router.push('/exercises')
   }
+  await router.push('/')
 }
 
 function chip(fave: LikedPattern, key: string): string | null {

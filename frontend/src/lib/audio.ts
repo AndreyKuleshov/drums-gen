@@ -45,12 +45,37 @@ function beatWholeNotes(num: number, den: number): number {
   return (compound ? 3 : 1) / den
 }
 
-// Snare voice: two clearly audible levels — a normal hit and a louder, fuller
-// accent (extra brightness + a bit of drum body). Both are plainly heard; the
-// accent just stands out. (Swap these for real samples later via a Tone.Sampler.)
-let accentNoise: Tone.NoiseSynth | null = null
-let normalNoise: Tone.NoiseSynth | null = null
-let body: Tone.MembraneSynth | null = null
+// Snare voice: the same acoustic snare sample the full kit uses, so Exercises and
+// Pattern sound identical. Each hit is a one-shot ToneBufferSource through a
+// per-hit gain (velocity) so overlapping strokes — a flam's grace + main — layer
+// instead of cutting each other off.
+const SAMPLE_VERSION = '3'
+function sampleUrl(name: string): string {
+  return `${import.meta.env.BASE_URL}samples/${name}?v=${SAMPLE_VERSION}`
+}
+let snareBuffer: Tone.ToneAudioBuffer | null = null
+function snareBuf(): Tone.ToneAudioBuffer {
+  if (snareBuffer === null) snareBuffer = new Tone.ToneAudioBuffer(sampleUrl('snare.wav'))
+  return snareBuffer
+}
+function playSnare(time: number, velocity: number): void {
+  const buf = snareBuf()
+  if (!buf.loaded) return
+  safeTrigger(() => {
+    const gain = new Tone.Gain(velocity).toDestination()
+    const src = new Tone.ToneBufferSource(buf).connect(gain)
+    src.onended = (): void => {
+      try {
+        src.dispose()
+        gain.dispose()
+      } catch {
+        // already disposed
+      }
+    }
+    src.start(time)
+  })
+}
+
 let click: Tone.PolySynth<Tone.Synth> | null = null
 
 /** Trigger a voice, ignoring Tone's "start time must be strictly greater"
@@ -70,55 +95,8 @@ type ClickLevel = 'down' | 'beat' | 'sub'
 const CLICK_HZ: Record<ClickLevel, number> = { down: 2000, beat: 1400, sub: 950 }
 const CLICK_VEL: Record<ClickLevel, number> = { down: 1, beat: 0.7, sub: 0.32 }
 
-function getAccentNoise(): Tone.NoiseSynth {
-  if (accentNoise === null) {
-    accentNoise = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
-    })
-    const filter = new Tone.Filter(4200, 'bandpass').toDestination()
-    filter.Q.value = 0.6
-    accentNoise.connect(filter)
-    accentNoise.volume.value = 1
-  }
-  return accentNoise
-}
-
-function getNormalNoise(): Tone.NoiseSynth {
-  if (normalNoise === null) {
-    normalNoise = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.08, sustain: 0 },
-    })
-    const filter = new Tone.Filter(2700, 'bandpass').toDestination()
-    filter.Q.value = 0.6
-    normalNoise.connect(filter)
-    normalNoise.volume.value = -5
-  }
-  return normalNoise
-}
-
-function getBody(): Tone.MembraneSynth {
-  if (body === null) {
-    body = new Tone.MembraneSynth({
-      pitchDecay: 0.03,
-      octaves: 3,
-      envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
-    }).toDestination()
-    body.volume.value = -7
-  }
-  return body
-}
-
 function hit(time: number, accent: boolean): void {
-  safeTrigger(() => {
-    if (accent) {
-      getAccentNoise().triggerAttackRelease('16n', time, 1)
-      getBody().triggerAttackRelease('D2', '16n', time, 0.9)
-    } else {
-      getNormalNoise().triggerAttackRelease('16n', time, 0.85)
-    }
-  })
+  playSnare(time, accent ? 1 : 0.62)
 }
 
 let clickVolumeDb = -10
@@ -202,6 +180,8 @@ export interface PlayOptions {
 
 export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promise<void> {
   await Tone.start()
+  snareBuf() // kick off sample load
+  await Tone.loaded()
   const transport = Tone.getTransport()
   stopPhrase()
   const draw = Tone.getDraw()
@@ -239,7 +219,7 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
     for (let k = 0; k < event.grace; k++) {
       const lead = (event.grace - k) * 0.032
       transport.schedule((time) => {
-        safeTrigger(() => getNormalNoise().triggerAttackRelease('32n', time, 0.4))
+        playSnare(time, 0.4)
       }, Math.max(0, prerollSec + event.timeSec - lead))
     }
     transport.schedule((time) => {
@@ -280,6 +260,63 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
   }, endSec)
 
   transport.start()
+}
+
+export interface MetroSpan {
+  /** Per-bar meters of the span being played (in order). */
+  bars: { num: number; den: number }[]
+  /** Seconds per whole note at the playback tempo. */
+  wholeNoteSec: number
+  /** Count-in bars of metronome before the span (0 = none). Uses the first bar's meter. */
+  prerollBars?: number
+  /** Initial overlay-click on-state (also settable live via setOverlayClick). */
+  overlay?: boolean
+}
+
+/** Schedule a count-in then a live overlay-click grid across `bars` onto the
+ * shared transport, and return the count-in length in seconds so the caller can
+ * offset its own note events. Each click reads the live shared subdivision and
+ * overlay flag, so both can change mid-playback. Shared by the rudiment and
+ * full-kit players. */
+export function scheduleMetro(span: MetroSpan): number {
+  const transport = Tone.getTransport()
+  overlayClickOn = span.overlay ?? overlayClickOn
+
+  const first = span.bars[0] ?? { num: 4, den: 4 }
+  const beat0 = beatWholeNotes(first.num, first.den)
+  const barWhole0 = first.num / first.den
+  const finePerBar0 = Math.round(barWhole0 / FINE)
+
+  const preBars = Math.max(0, Math.trunc(span.prerollBars ?? 0))
+  for (let bar = 0; bar < preBars; bar++) {
+    for (let i = 0; i < finePerBar0; i++) {
+      const offset = i * FINE
+      const timeSec = (bar * barWhole0 + offset) * span.wholeNoteSec
+      transport.schedule((time) => {
+        const level = clickLevelAt(offset, beat0, metroSubWhole)
+        if (level !== null) tick(time, level)
+      }, timeSec)
+    }
+  }
+  const prerollSec = preBars * barWhole0 * span.wholeNoteSec
+
+  let elapsed = 0
+  for (const b of span.bars) {
+    const beat = beatWholeNotes(b.num, b.den)
+    const barWhole = b.num / b.den
+    const finePerBar = Math.round(barWhole / FINE)
+    for (let i = 0; i < finePerBar; i++) {
+      const offset = i * FINE
+      const timeSec = prerollSec + (elapsed + offset) * span.wholeNoteSec
+      transport.schedule((time) => {
+        if (!overlayClickOn) return
+        const level = clickLevelAt(offset, beat, metroSubWhole)
+        if (level !== null) tick(time, level)
+      }, timeSec)
+    }
+    elapsed += barWhole
+  }
+  return prerollSec
 }
 
 /** Change playback tempo live (no restart). */

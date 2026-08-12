@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { RouterLink, useRoute } from 'vue-router'
-
-const route = useRoute()
+// The single distinguishing control between the two studio modes. No routing —
+// it just flips a reactive mode on the one page.
+const mode = defineModel<'groove' | 'exercise'>({ required: true })
+const opts = [
+  { value: 'groove', label: 'Pattern' },
+  { value: 'exercise', label: 'Exercises' },
+] as const
 </script>
 
 <template>
   <nav class="modeswitch" aria-label="Mode">
-    <RouterLink to="/" class="modeswitch__opt" :class="{ 'modeswitch__opt--on': route.path === '/' }">
-      Pattern
-    </RouterLink>
-    <RouterLink
-      to="/exercises"
+    <button
+      v-for="o in opts"
+      :key="o.value"
+      type="button"
       class="modeswitch__opt"
-      :class="{ 'modeswitch__opt--on': route.path === '/exercises' }"
+      :class="{ 'modeswitch__opt--on': mode === o.value }"
+      :aria-pressed="mode === o.value"
+      @click="mode = o.value"
     >
-      Exercises
-    </RouterLink>
+      {{ o.label }}
+    </button>
   </nav>
 </template>
 
@@ -32,13 +37,15 @@ const route = useRoute()
 
 .modeswitch__opt {
   padding: 6px 14px;
+  border: none;
   border-radius: 999px;
   color: var(--text-dim);
+  background: transparent;
   font-family: var(--font-mono);
   font-size: 0.64rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  text-decoration: none;
+  cursor: pointer;
   transition:
     color 0.15s ease,
     background 0.15s ease;

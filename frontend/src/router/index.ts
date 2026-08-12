@@ -1,21 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
-import PatternView from '../views/PatternView.vue'
+import StudioView from '../views/StudioView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'pattern', component: PatternView },
-    {
-      path: '/exercises',
-      name: 'exercises',
-      component: () => import('../views/GeneratorView.vue'),
-    },
+    // One unified studio page; the mode (groove vs exercise) is in-page state.
+    { path: '/', name: 'studio', component: StudioView },
     {
       path: '/rudiments',
       name: 'rudiments',
       component: () => import('../views/RudimentsView.vue'),
+    },
+    {
+      path: '/shortcuts',
+      name: 'shortcuts',
+      component: () => import('../views/ShortcutsView.vue'),
     },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
     { path: '/register', name: 'register', component: () => import('../views/RegisterView.vue') },
