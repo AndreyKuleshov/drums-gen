@@ -17,6 +17,7 @@ from drumgen.domain.enums import Articulation, Difficulty, Hand, Surface
 from drumgen.domain.fractions import FractionField
 from drumgen.domain.groove import Groove, GrooveBar, Hit
 from drumgen.domain.models import TimeSignature
+from drumgen.fill_seeds import seeded_fill_bars
 
 # Absolute note-value grids (whole-note units). Using absolute 1/8 and 1/16
 # rather than beat-relative subdivisions keeps every onset on a 1/16 grid, which
@@ -350,6 +351,18 @@ def _pick_cell(pos: float, difficulty: Difficulty, rng: random.Random) -> list[i
 
 
 def _fill_bars(
+    ts: TimeSignature, difficulty: Difficulty, num_bars: int, rng: random.Random
+) -> list[GrooveBar]:
+    """A musical kit fill. In common time it draws from the curated seed bank of
+    real fill phrases (one distinct seed per bar); other meters fall back to
+    procedural beat-by-beat composition."""
+    seeded = seeded_fill_bars(ts, difficulty, num_bars, rng)
+    if seeded is not None:
+        return seeded
+    return _procedural_fill_bars(ts, difficulty, num_bars, rng)
+
+
+def _procedural_fill_bars(
     ts: TimeSignature, difficulty: Difficulty, num_bars: int, rng: random.Random
 ) -> list[GrooveBar]:
     """A musical kit fill composed beat by beat: varied rhythm (so bars differ),
