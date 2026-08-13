@@ -120,6 +120,21 @@ def test_multibar_fill_uses_distinct_seeds_per_bar():
     assert len(set(shapes)) == len(shapes), "bars within a phrase should differ"
 
 
+def test_multibar_fill_builds_toward_a_climax():
+    # A multi-bar fill should develop: stroke density is non-decreasing across
+    # bars, so the phrase builds into its landing rather than jumping around.
+    rng = random.Random(13)
+    bars = seeded_fill_bars(_44, Difficulty.PRO, 4, rng)
+    assert bars is not None
+    counts = [len(b.hands) for b in bars]
+    assert counts == sorted(counts), f"fill should build, got {counts}"
+    # The climax (last) bar is the busiest and the one that lands a kick.
+    assert counts[-1] == max(counts)
+    last = bars[-1]
+    final_onset = max(h.onset for h in last.hands)
+    assert any(f.onset == final_onset for f in last.feet)
+
+
 def test_fill_is_grounded_with_a_kick_and_lands():
     g = generate_groove(
         GrooveRequest(

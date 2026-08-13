@@ -29,7 +29,8 @@ from drumgen.domain.groove import GrooveBar, Hit
 from drumgen.domain.models import TimeSignature
 
 _DATA = "fill_seeds.json"
-_KICK_DUR = Fraction(1, 16)
+_SIXTEENTH = Fraction(1, 16)
+_KICK_DUR = _SIXTEENTH
 
 
 @dataclass(frozen=True)
@@ -132,11 +133,22 @@ def _render(seed: FillSeed, ts: TimeSignature, is_last: bool) -> GrooveBar:
     return GrooveBar(time_sig=ts, hands=hands, feet=feet)
 
 
+def _density(seed: FillSeed) -> tuple[int, int]:
+    """How busy a seed is: stroke count, then how many are 16th-or-finer. Used to
+    order a multi-bar fill so it builds toward its climax."""
+    fine = sum(1 for h in seed.hands if h.duration <= _SIXTEENTH)
+    return (len(seed.hands), fine)
+
+
 def seeded_fill_bars(
     ts: TimeSignature, difficulty: Difficulty, num_bars: int, rng: random.Random
 ) -> list[GrooveBar] | None:
-    """A fill built from the seed bank, one distinct seed per bar (no immediate
-    repeats within a phrase). Returns None if the meter isn't seedable."""
+    """A fill built from the seed bank. Distinct seeds per bar (no immediate
+    repeats), then ordered by density so the phrase DEVELOPS: earlier bars set
+    up, the busiest bar comes last as the climax and lands the fill. This gives
+    multi-bar fills a musical arc and makes the tier read clearly (a PRO phrase
+    climaxes on a 32nd burst, a beginner one on a simple tom move). Returns None
+    if the meter isn't seedable."""
     if not is_seedable(ts):
         return None
     seeds = _seeds_for(difficulty)
@@ -144,11 +156,13 @@ def seeded_fill_bars(
         return None
 
     pool: list[FillSeed] = []
-    bars: list[GrooveBar] = []
-    for bi in range(num_bars):
+    chosen: list[FillSeed] = []
+    for _ in range(num_bars):
         if not pool:
             pool = list(seeds)
-        chosen = rng.choice(pool)
-        pool.remove(chosen)
-        bars.append(_render(chosen, ts, is_last=(bi == num_bars - 1)))
-    return bars
+        pick = rng.choice(pool)
+        pool.remove(pick)
+        chosen.append(pick)
+
+    chosen.sort(key=_density)
+    return [_render(s, ts, is_last=(i == len(chosen) - 1)) for i, s in enumerate(chosen)]
