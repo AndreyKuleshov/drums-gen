@@ -104,8 +104,9 @@ function render(phrase: Phrase): void {
     const specs = barToNoteSpecs(bar)
     const notes = specs.map((spec) => {
       const note = new StaveNote({ keys: ['b/4'], duration: spec.duration })
+      const label = spec.ghost ? spec.sticking.toLowerCase() : spec.sticking
       note.addModifier(
-        new Annotation(spec.sticking).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
+        new Annotation(label).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
       )
       // Accents are drawn manually (below) rather than as VexFlow articulations,
       // so the tuplet bracket doesn't get pushed up to clear them — that keeps
@@ -155,6 +156,19 @@ function render(phrase: Phrase): void {
       context.setFont('Georgia, serif', 15, 'bold')
       for (const i of accentIdx) {
         context.fillText('>', notes[i].getAbsoluteX() - 3, accentY)
+      }
+    }
+
+    // Ghost notes: parentheses around the notehead, drawn manually (consistent
+    // with the manual accent marks above) so no extra VexFlow modifier is needed.
+    const ghostIdx = specs.flatMap((s, i) => (s.ghost ? [i] : []))
+    if (ghostIdx.length > 0) {
+      context.setFont('Georgia, serif', 15, 'normal')
+      for (const i of ghostIdx) {
+        const x = notes[i].getAbsoluteX()
+        const y = notes[i].getYs()[0]
+        context.fillText('(', x - 9, y + 5)
+        context.fillText(')', x + 7, y + 5)
       }
     }
 
