@@ -22,7 +22,7 @@ export function scheduleTimes(phrase: Phrase, tempoBpm: number = phrase.tempo_bp
     for (const stroke of bar.strokes) {
       events.push({
         timeSec: elapsedWhole * wholeNoteSec,
-        velocity: stroke.accent ? 1.0 : stroke.ghost ? 0.3 : 0.6,
+        velocity: stroke.accent ? 1.0 : stroke.ghost ? 0.15 : 0.6,
         hand: stroke.hand,
         grace: stroke.grace,
       })

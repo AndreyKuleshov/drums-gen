@@ -12,7 +12,7 @@
 
 - Two hard rules over the full note stream (including block seams):
   1. **Adjacent accents alternate hands** — if notes *i* and *i+1* are both accents, they must be different hands.
-  2. **Ghosts cap at two per hand in a row** — no run of 3+ consecutive ghost notes on the same hand.
+  2. **No more than two strokes on the same hand in a row** — accents and ghosts alike; no run of 3+ same-hand strokes (stricter than a ghosts-only cap; closes the block-seam case). [Corrected after local testing from the original "ghosts cap at two per hand in a row".]
 - Every note is **accent xor ghost** (no third dynamic level).
 - Vocabulary stored canonically R-lead; L-lead derived by swapping `R`↔`L`.
 - Deterministic: same request + `seed` → identical `Phrase`.
@@ -185,7 +185,7 @@ groupings, paradiddles) edge-to-edge to fill N bars, enforcing two rules across
 the whole stream:
 
   1. Adjacent accents alternate hands.
-  2. No more than two consecutive ghost notes on the same hand.
+  2. No more than two consecutive strokes on the same hand (accents and ghosts alike).
 
 Every note is either an accent (uppercase) or a ghost (lowercase). Blocks are
 stored canonically R-lead; the L-lead form is `mirror()`. Output is the existing

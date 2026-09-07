@@ -38,8 +38,12 @@ Applied to the flat note stream (the whole phrase, across block seams):
    **both accents**, they must be on different hands. Accents separated by at
    least one ghost are unconstrained (so `R l R l l` — two right-hand accents
    split by a ghost — is legal).
-2. **Ghosts cap at two per hand in a row.** No run of 3+ consecutive **ghost**
-   notes on the same hand. (`R l l` is fine; `R l l l` is not.)
+2. **No more than two strokes on the same hand in a row — accents and ghosts
+   alike.** You can't physically play three in a row with one hand, so a same-hand
+   accent must not abut two same-hand ghosts (`R l l` and `l l L` mirror-cases both
+   count). (`R l l` is fine; `R l l l` and `l l L` are not.) This is stricter than a
+   ghosts-only cap — corrected from the original draft "ghosts cap at two per hand in
+   a row" after local testing surfaced a three-same-hand run at a block seam.
 
 No other sticking constraints are imposed (YAGNI).
 

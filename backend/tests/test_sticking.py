@@ -46,6 +46,17 @@ def test_rule2_no_more_than_two_ghosts_per_hand_in_a_row():
     assert rules_hold((("L", False), ("L", False), ("R", False), ("R", False)))
 
 
+def test_rule2_counts_accents_and_ghosts_together():
+    # No three strokes on the same hand in a row, even mixing an accent with
+    # ghosts — you can't physically play three in a row with one hand.
+    assert not rules_hold((("L", False), ("L", False), ("L", True)))  # l l L (seam bug)
+    assert not rules_hold((("L", True), ("L", False), ("L", False)))  # L l l
+    assert not rules_hold((("R", True), ("R", False), ("R", False)))  # R r r
+    # two same-hand strokes (accent + ghost, either order) stay legal
+    assert rules_hold((("L", True), ("L", False)))
+    assert rules_hold((("R", False), ("R", True), ("L", False)))
+
+
 _44 = TimeSignature(num=4, den=4)
 
 

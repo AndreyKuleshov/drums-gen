@@ -24,7 +24,7 @@ describe('scheduleTimes velocity', () => {
   it('is loud for accents, soft for ghosts, medium otherwise', () => {
     const [acc, ghost, normal] = scheduleTimes(phrase)
     expect(acc.velocity).toBe(1.0)
-    expect(ghost.velocity).toBe(0.3)
+    expect(ghost.velocity).toBe(0.15)
     expect(normal.velocity).toBe(0.6)
   })
 })

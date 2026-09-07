@@ -5,7 +5,8 @@ groupings, paradiddles) edge-to-edge to fill N bars, enforcing two rules across
 the whole stream:
 
   1. Adjacent accents alternate hands.
-  2. No more than two consecutive ghost notes on the same hand.
+  2. No more than two consecutive strokes on the same hand (accents and ghosts
+     alike) — you can't play three in a row with one hand.
 
 Every note is either an accent (uppercase) or a ghost (lowercase). Blocks are
 stored canonically R-lead; the L-lead form is `mirror()`. Output is the existing
@@ -56,13 +57,14 @@ def rules_hold(stream: Sequence[Note]) -> bool:
         prev_hand, prev_accent = stream[i - 1]
         if accent and prev_accent and hand == prev_hand:
             return False
-    # Rule 2: at most two consecutive same-hand ghosts.
+    # Rule 2: no more than two consecutive strokes on the SAME HAND — counting
+    # accents and ghosts alike. Three in a row can't be played by one hand, so a
+    # same-hand accent must not abut two same-hand ghosts (or vice versa). This is
+    # stricter than a ghosts-only cap and closes the block-seam case where two
+    # same-hand ghosts ending one block meet a same-hand accent starting the next.
     run_hand: str | None = None
     run = 0
-    for hand, accent in stream:
-        if accent:
-            run_hand, run = None, 0
-            continue
+    for hand, _accent in stream:
         if hand == run_hand:
             run += 1
         else:
