@@ -119,3 +119,19 @@ def test_subdivision_that_does_not_divide_the_bar_raises():
     # 4/4 bar length 1; 1 / (3/8) = 8/3 is not a whole number of notes.
     with pytest.raises(GenerationError):
         generate_sticking(_req(subdivision=Fraction(3, 8)))
+
+
+def test_pathological_request_raises_instead_of_crashing():
+    # An unboundedly large phrase must be rejected with GenerationError, never an
+    # uncaught RecursionError.
+    with pytest.raises(GenerationError):
+        generate_sticking(
+            _req(time_sig=TimeSignature(num=1, den=1), subdivision=Fraction(1, 2500), num_bars=1)
+        )
+
+
+def test_large_supported_request_still_generates():
+    # 64 bars of 4/4 at 1/16 = 1024 notes is exactly the supported ceiling.
+    phrase = generate_sticking(_req(num_bars=64, subdivision=Fraction(1, 16), seed=1))
+    assert len(phrase.bars) == 64
+    assert sum(len(b.strokes) for b in phrase.bars) == 1024

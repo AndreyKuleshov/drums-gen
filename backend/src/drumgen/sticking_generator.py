@@ -10,6 +10,8 @@ the whole stream:
 Every note is either an accent (uppercase) or a ghost (lowercase). Blocks are
 stored canonically R-lead; the L-lead form is `mirror()`. Output is the existing
 monophonic `Phrase` model, so it renders and plays through the same components.
+Provides `StickingRequest` and `generate_sticking`, a seeded backtracking packer
+that fills N bars and returns a `Phrase`.
 """
 
 import random
@@ -72,6 +74,12 @@ def rules_hold(stream: Sequence[Note]) -> bool:
 
 _FAMILY_FLAGS: tuple[Family, ...] = ("singles", "odd", "paradiddle")
 
+# Upper bound on notes in one phrase. Bounds the backtracking depth well under
+# Python's recursion limit and rejects pathological meters/subdivisions with a
+# controlled GenerationError instead of an uncaught RecursionError. 1024 covers
+# the supported v1 space (e.g. 4/4 at 1/16 for 64 bars = 1024 notes).
+_MAX_NOTES = 1024
+
 
 class StickingRequest(BaseModel):
     time_sig: TimeSignature
@@ -132,6 +140,11 @@ def generate_sticking(req: StickingRequest) -> Phrase:
         raise GenerationError("Subdivision must divide the bar into whole notes.")
     per_bar = int(per_bar_exact)
     total = per_bar * req.num_bars
+
+    if total > _MAX_NOTES:
+        raise GenerationError(
+            f"Phrase too large ({total} notes); reduce bars or use a coarser subdivision."
+        )
 
     rng = random.Random(req.seed)
     stream = _pack(total, candidates, rng)
