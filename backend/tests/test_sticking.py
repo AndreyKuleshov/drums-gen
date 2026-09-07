@@ -2,6 +2,8 @@ from fractions import Fraction
 
 import pytest
 
+from drumgen.domain.enums import Hand, Surface
+from drumgen.domain.groove import Groove
 from drumgen.domain.models import Phrase, TimeSignature
 from drumgen.generator import GenerationError
 from drumgen.sticking_generator import VOCAB, StickingRequest, generate_sticking, mirror, rules_hold
@@ -75,8 +77,14 @@ def _stream(phrase: Phrase) -> list[tuple[str, bool]]:
     return [(s.hand.value, s.accent) for bar in phrase.bars for s in bar.strokes]
 
 
+def _snare(**kw: object) -> Phrase:
+    result = generate_sticking(_req(**kw))
+    assert isinstance(result, Phrase)
+    return result
+
+
 def test_fills_exact_note_count_per_bar():
-    phrase = generate_sticking(_req(num_bars=2, subdivision=Fraction(1, 16), seed=1))
+    phrase = _snare(num_bars=2, subdivision=Fraction(1, 16), seed=1)
     assert len(phrase.bars) == 2
     for bar in phrase.bars:
         assert len(bar.strokes) == 16  # 4/4 at 1/16
@@ -84,7 +92,7 @@ def test_fills_exact_note_count_per_bar():
 
 
 def test_every_note_is_accent_xor_ghost():
-    phrase = generate_sticking(_req(num_bars=4, seed=3))
+    phrase = _snare(num_bars=4, seed=3)
     for bar in phrase.bars:
         for s in bar.strokes:
             assert s.accent != s.ghost  # exactly one is true
@@ -92,31 +100,31 @@ def test_every_note_is_accent_xor_ghost():
 
 @pytest.mark.parametrize("seed", range(30))
 def test_generated_phrase_always_satisfies_both_rules(seed: int):
-    phrase = generate_sticking(_req(num_bars=4, subdivision=Fraction(1, 16), seed=seed))
+    phrase = _snare(num_bars=4, subdivision=Fraction(1, 16), seed=seed)
     assert rules_hold(_stream(phrase))
 
 
 def test_family_toggles_are_respected_singles_only():
     # Singles are all accents; with only singles enabled, no ghosts appear.
-    phrase = generate_sticking(_req(num_bars=2, singles=True, odd=False, paradiddle=False, seed=5))
+    phrase = _snare(num_bars=2, singles=True, odd=False, paradiddle=False, seed=5)
     assert all(s.accent and not s.ghost for bar in phrase.bars for s in bar.strokes)
 
 
 def test_each_family_alone_can_fill_a_bar():
     for fam in ("singles", "odd", "paradiddle"):
         kw: dict[str, object] = {"singles": False, "odd": False, "paradiddle": False, fam: True}
-        phrase = generate_sticking(_req(num_bars=1, subdivision=Fraction(1, 16), seed=2, **kw))
+        phrase = _snare(num_bars=1, subdivision=Fraction(1, 16), seed=2, **kw)
         assert len(phrase.bars[0].strokes) == 16
 
 
 def test_deterministic_for_a_fixed_seed():
-    a = generate_sticking(_req(num_bars=3, seed=42)).model_dump()
-    b = generate_sticking(_req(num_bars=3, seed=42)).model_dump()
+    a = _snare(num_bars=3, seed=42).model_dump()
+    b = _snare(num_bars=3, seed=42).model_dump()
     assert a == b
 
 
 def test_eighth_subdivision_uses_eight_notes_per_bar():
-    phrase = generate_sticking(_req(num_bars=1, subdivision=Fraction(1, 8), seed=1))
+    phrase = _snare(num_bars=1, subdivision=Fraction(1, 8), seed=1)
     assert len(phrase.bars[0].strokes) == 8
     assert all(s.duration == Fraction(1, 8) for s in phrase.bars[0].strokes)
 
@@ -143,6 +151,67 @@ def test_pathological_request_raises_instead_of_crashing():
 
 def test_large_supported_request_still_generates():
     # 64 bars of 4/4 at 1/16 = 1024 notes is exactly the supported ceiling.
-    phrase = generate_sticking(_req(num_bars=64, subdivision=Fraction(1, 16), seed=1))
+    phrase = _snare(num_bars=64, subdivision=Fraction(1, 16), seed=1)
     assert len(phrase.bars) == 64
     assert sum(len(b.strokes) for b in phrase.bars) == 1024
+
+
+def _hand_seq(groove: Groove) -> list[tuple[str, bool]]:
+    return [
+        (h.hand.value, h.accent) for bar in groove.bars for h in bar.hands if h.hand is not None
+    ]
+
+
+def test_snare_voicing_is_the_default_and_returns_a_phrase():
+    assert isinstance(generate_sticking(_req(seed=1)), Phrase)
+    assert isinstance(generate_sticking(_req(seed=1, voicing="snare")), Phrase)
+
+
+def test_kit_voicing_returns_a_groove_across_the_kit():
+    g = generate_sticking(_req(num_bars=2, seed=1, voicing="kit"))
+    assert isinstance(g, Groove)
+    assert len(g.bars) == 2
+    surfaces = {h.surface for bar in g.bars for h in bar.hands}
+    # accents ride snare + toms; ghosts split to hi-hat (R) and snare (L)
+    assert Surface.HIHAT in surfaces
+    assert surfaces & {Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW}
+    # kick grounds every bar on the downbeat
+    for bar in g.bars:
+        assert any(f.surface is Surface.KICK and f.onset == 0 for f in bar.feet)
+
+
+def test_kit_lands_a_kick_under_the_final_stroke():
+    g = generate_sticking(_req(num_bars=2, seed=3, voicing="kit"))
+    assert isinstance(g, Groove)
+    last = g.bars[-1]
+    final_onset = max(h.onset for h in last.hands)
+    assert any(f.onset == final_onset for f in last.feet)
+
+
+def test_kit_preserves_the_sticking_hand_rules():
+    # Orchestration only changes surfaces; the R/L sequence and its two rules
+    # must survive across many seeds.
+    for seed in range(20):
+        g = generate_sticking(_req(num_bars=4, seed=seed, voicing="kit"))
+        assert isinstance(g, Groove)
+        assert rules_hold(_hand_seq(g))
+
+
+def test_kit_accents_are_accents_and_ghosts_are_ghosts():
+    g = generate_sticking(_req(num_bars=2, seed=5, voicing="kit"))
+    assert isinstance(g, Groove)
+    for bar in g.bars:
+        for h in bar.hands:
+            assert h.accent != h.ghost  # every hand stroke is accent xor ghost
+        # ghosts on the right hand become hi-hat; on the left, snare
+        for h in bar.hands:
+            if h.ghost and h.hand is Hand.R:
+                assert h.surface is Surface.HIHAT
+            if h.ghost and h.hand is Hand.L:
+                assert h.surface is Surface.SNARE
+
+
+def test_kit_is_deterministic_for_a_fixed_seed():
+    a = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()
+    b = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()
+    assert a == b

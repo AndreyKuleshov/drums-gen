@@ -64,8 +64,10 @@ def post_generate_pattern(req: GrooveRequest) -> Groove:
     return generate_groove(req)
 
 
-@app.post("/patterns2/generate", response_model=Phrase)
-def post_generate_patterns2(req: StickingRequest) -> Phrase:
+# Returns a monophonic Phrase for voicing="snare" or a polyphonic Groove for
+# voicing="kit"; response_model=None lets FastAPI serialize whichever it is.
+@app.post("/patterns2/generate", response_model=None)
+def post_generate_patterns2(req: StickingRequest) -> Phrase | Groove:
     return generate_sticking(req)
 
 

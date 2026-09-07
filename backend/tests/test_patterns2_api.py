@@ -26,6 +26,20 @@ def test_generate_returns_a_phrase():
     assert "ghost" in data["bars"][0]["strokes"][0]
 
 
+def test_kit_voicing_returns_a_groove():
+    resp = client.post("/patterns2/generate", json=_body(seed=1, voicing="kit"))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["bars"]) == 2
+    bar = data["bars"][0]
+    # Groove shape: polyphonic hands + feet voices (not a monophonic Phrase)
+    assert "hands" in bar
+    assert "feet" in bar
+    assert any(f["surface"] == "kick" for f in bar["feet"])
+    surfaces = {h["surface"] for b in data["bars"] for h in b["hands"]}
+    assert "hihat" in surfaces
+
+
 def test_no_family_enabled_returns_422():
     resp = client.post(
         "/patterns2/generate",

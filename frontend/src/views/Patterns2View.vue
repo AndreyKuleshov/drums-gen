@@ -2,13 +2,15 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
 import { ApiError, apiFetch } from '../lib/api'
 import { playPhrase, stopPhrase } from '../lib/audio'
+import { playGroove, stopGroove } from '../lib/kit'
 import { persistedRef } from '../lib/storage'
-import type { Phrase } from '../types'
+import type { Groove, Phrase } from '../types'
 
 const tempo = persistedRef('patterns2-tempo', 100)
 const bars = persistedRef('patterns2-bars', 2)
@@ -16,21 +18,31 @@ const subdivision = persistedRef('patterns2-sub', '1/16')
 const singles = persistedRef('patterns2-singles', true)
 const odd = persistedRef('patterns2-odd', true)
 const paradiddle = persistedRef('patterns2-paradiddle', true)
+// 'snare' = pure sticking on the snare; 'kit' = orchestrated across the kit.
+const voicing = persistedRef<'snare' | 'kit'>('patterns2-voicing', 'snare')
 
 const phrase = ref<Phrase | null>(null)
+const groove = ref<Groove | null>(null)
 const activeStep = ref<number | null>(null)
 const error = ref('')
 
 const transport = ref<InstanceType<typeof TransportRack> | null>(null)
-const canPlay = computed(() => phrase.value !== null)
+const canPlay = computed(() => phrase.value !== null || groove.value !== null)
 const meter = { num: 4, den: 4 }
 
-const engine: PlayEngine = {
+const phraseEngine: PlayEngine = {
   play: async (o) => {
     if (phrase.value !== null) await playPhrase(phrase.value, o)
   },
   stop: stopPhrase,
 }
+const grooveEngine: PlayEngine = {
+  play: async (o) => {
+    if (groove.value !== null) await playGroove(groove.value, o)
+  },
+  stop: stopGroove,
+}
+const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine : phraseEngine))
 
 async function generate(): Promise<void> {
   error.value = ''
@@ -38,22 +50,28 @@ async function generate(): Promise<void> {
     error.value = 'Enable at least one block family.'
     return
   }
+  const body = JSON.stringify({
+    time_sig: meter,
+    num_bars: bars.value,
+    subdivision: subdivision.value,
+    tempo_bpm: tempo.value,
+    singles: singles.value,
+    odd: odd.value,
+    paradiddle: paradiddle.value,
+    voicing: voicing.value,
+  })
   try {
-    phrase.value = await apiFetch<Phrase>('/patterns2/generate', {
-      method: 'POST',
-      body: JSON.stringify({
-        time_sig: meter,
-        num_bars: bars.value,
-        subdivision: subdivision.value,
-        tempo_bpm: tempo.value,
-        singles: singles.value,
-        odd: odd.value,
-        paradiddle: paradiddle.value,
-      }),
-    })
+    // The endpoint returns a monophonic Phrase for 'snare' or a polyphonic
+    // Groove for 'kit'; fetch the shape we asked for and clear the other.
+    if (voicing.value === 'kit') {
+      groove.value = await apiFetch<Groove>('/patterns2/generate', { method: 'POST', body })
+      phrase.value = null
+    } else {
+      phrase.value = await apiFetch<Phrase>('/patterns2/generate', { method: 'POST', body })
+      groove.value = null
+    }
   } catch (e) {
-    error.value =
-      e instanceof ApiError ? e.message : "Couldn’t generate. Is the engine running?"
+    error.value = e instanceof ApiError ? e.message : "Couldn’t generate. Is the engine running?"
   }
 }
 
@@ -96,7 +114,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <ScoreView v-if="phrase" :phrase="phrase" :active-step="activeStep" />
+          <GrooveScore v-if="groove" :groove="groove" :active-step="activeStep" />
+          <ScoreView v-else-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <p class="screen__empty-text">
               Toggle families and hit Generate for a sticking pattern.
@@ -122,6 +141,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           <button type="button" :class="{ on: odd }" @click="odd = !odd">Odd 3/5/7</button>
           <button type="button" :class="{ on: paradiddle }" @click="paradiddle = !paradiddle">
             Paradiddle
+          </button>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Voicing</span>
+          <button type="button" :class="{ on: voicing === 'snare' }" @click="voicing = 'snare'">
+            Snare
+          </button>
+          <button type="button" :class="{ on: voicing === 'kit' }" @click="voicing = 'kit'">
+            Kit
           </button>
         </div>
 
