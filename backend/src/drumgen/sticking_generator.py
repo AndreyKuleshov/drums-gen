@@ -74,10 +74,13 @@ def rules_hold(stream: Sequence[Note]) -> bool:
 
 _FAMILY_FLAGS: tuple[Family, ...] = ("singles", "odd", "paradiddle")
 
-# Upper bound on notes in one phrase. Bounds the backtracking depth well under
-# Python's recursion limit and rejects pathological meters/subdivisions with a
-# controlled GenerationError instead of an uncaught RecursionError. 1024 covers
-# the supported v1 space (e.g. 4/4 at 1/16 for 64 bars = 1024 notes).
+# Hard ceiling on notes per phrase. Turns pathological meters/subdivisions into a
+# controlled GenerationError instead of unbounded work. Note: this bounds total
+# work, NOT recursion depth directly — _pack recurses once per placed block, so
+# worst-case depth is `total`. In practice the packer favours multi-note blocks
+# so realistic depth stays a few hundred at the 1024 ceiling; if the vocabulary
+# or subdivisions ever change, re-check depth vs. the recursion limit here.
+# 1024 covers the supported v1 space (4/4 at 1/16 for 64 bars = 1024 notes).
 _MAX_NOTES = 1024
 
 

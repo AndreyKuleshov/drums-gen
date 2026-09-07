@@ -5,7 +5,7 @@ import { RouterLink } from 'vue-router'
 import ScoreView from '../components/ScoreView.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
-import { apiFetch } from '../lib/api'
+import { ApiError, apiFetch } from '../lib/api'
 import { playPhrase, stopPhrase } from '../lib/audio'
 import { persistedRef } from '../lib/storage'
 import type { Phrase } from '../types'
@@ -51,8 +51,9 @@ async function generate(): Promise<void> {
         paradiddle: paradiddle.value,
       }),
     })
-  } catch {
-    error.value = 'Couldn’t generate. Is the engine running?'
+  } catch (e) {
+    error.value =
+      e instanceof ApiError ? e.message : "Couldn’t generate. Is the engine running?"
   }
 }
 
