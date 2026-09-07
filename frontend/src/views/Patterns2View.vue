@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
+import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
 import { ApiError, apiFetch } from '../lib/api'
@@ -20,6 +21,10 @@ const odd = persistedRef('patterns2-odd', true)
 const paradiddle = persistedRef('patterns2-paradiddle', true)
 // 'snare' = pure sticking on the snare; 'kit' = orchestrated across the kit.
 const voicing = persistedRef<'snare' | 'kit'>('patterns2-voicing', 'snare')
+const voicings: { v: 'snare' | 'kit'; label: string }[] = [
+  { v: 'snare', label: 'Snare' },
+  { v: 'kit', label: 'Kit' },
+]
 
 const phrase = ref<Phrase | null>(null)
 const groove = ref<Groove | null>(null)
@@ -133,106 +138,213 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         @step="activeStep = $event"
       />
 
-      <p v-if="error" class="formmsg--error" role="alert">{{ error }}</p>
+      <p v-if="error" class="formmsg formmsg--error" role="alert">{{ error }}</p>
 
-      <section class="controls">
-        <div class="families" role="group" aria-label="Block families">
-          <button type="button" :class="{ on: singles }" @click="singles = !singles">Singles</button>
-          <button type="button" :class="{ on: odd }" @click="odd = !odd">Odd 3/5/7</button>
-          <button type="button" :class="{ on: paradiddle }" @click="paradiddle = !paradiddle">
-            Paradiddle
-          </button>
+      <form class="controls" @submit.prevent="generate">
+        <div class="controls__row">
+          <div class="field field--seg">
+            <span class="field__label">Families</span>
+            <div class="segment" role="group" aria-label="Block families">
+              <button
+                type="button"
+                :aria-pressed="singles"
+                :class="['segment__btn', { 'is-active': singles }]"
+                @click="singles = !singles"
+              >
+                Singles
+              </button>
+              <button
+                type="button"
+                :aria-pressed="odd"
+                :class="['segment__btn', { 'is-active': odd }]"
+                @click="odd = !odd"
+              >
+                Odd 3/5/7
+              </button>
+              <button
+                type="button"
+                :aria-pressed="paradiddle"
+                :class="['segment__btn', { 'is-active': paradiddle }]"
+                @click="paradiddle = !paradiddle"
+              >
+                Paradiddle
+              </button>
+            </div>
+          </div>
+
+          <div class="field field--seg field--narrow">
+            <span class="field__label">Voicing</span>
+            <div class="segment" role="radiogroup" aria-label="Voicing">
+              <button
+                v-for="o in voicings"
+                :key="o.v"
+                type="button"
+                role="radio"
+                :aria-checked="voicing === o.v"
+                :class="['segment__btn', { 'is-active': voicing === o.v }]"
+                @click="voicing = o.v"
+              >
+                {{ o.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="field field--seg field--narrow">
+            <span class="field__label">Subdivision</span>
+            <div class="segment" role="radiogroup" aria-label="Subdivision">
+              <button
+                v-for="s in ['1/8', '1/16']"
+                :key="s"
+                type="button"
+                role="radio"
+                :aria-checked="subdivision === s"
+                :class="['segment__btn', { 'is-active': subdivision === s }]"
+                @click="subdivision = s"
+              >
+                {{ s }}
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div class="field">
-          <span class="field__label">Voicing</span>
-          <button type="button" :class="{ on: voicing === 'snare' }" @click="voicing = 'snare'">
-            Snare
-          </button>
-          <button type="button" :class="{ on: voicing === 'kit' }" @click="voicing = 'kit'">
-            Kit
-          </button>
-        </div>
+        <div class="controls__row controls__row--foot">
+          <div class="field field--fixed">
+            <span class="field__label">Bars</span>
+            <Stepper v-model="bars" :min="1" :max="16" label="Number of bars" />
+          </div>
 
-        <div class="field">
-          <span class="field__label">Subdivision</span>
+          <div class="field field--fixed">
+            <span class="field__label">Tempo</span>
+            <div class="inline">
+              <Stepper v-model="tempo" :min="30" :max="300" :step="1" label="Tempo (BPM)" />
+              <span class="inline__sep">bpm</span>
+            </div>
+          </div>
+
           <button
-            v-for="s in ['1/8', '1/16']"
-            :key="s"
-            type="button"
-            :class="{ on: subdivision === s }"
-            @click="subdivision = s"
+            class="btn-primary controls__go"
+            type="submit"
+            data-test="generate"
+            data-tip="Generate (Enter)"
           >
-            {{ s }}
+            Generate
           </button>
         </div>
-
-        <label class="field">
-          <span class="field__label">Bars</span>
-          <input v-model.number="bars" type="number" min="1" max="16" />
-        </label>
-
-        <label class="field">
-          <span class="field__label">Tempo</span>
-          <input v-model.number="tempo" type="number" min="30" max="300" />
-        </label>
-
-        <button class="generate" type="button" data-test="generate" @click="generate">
-          Generate
-        </button>
-      </section>
+      </form>
     </div>
   </main>
 </template>
 
 <style scoped>
+/* Controls adopt the Studio's control-panel language: labelled fields with
+   segmented toggles and steppers, so both generators read as one system. */
 .controls {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-.families,
-.field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.field__label {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.controls button {
-  padding: 8px 12px;
-  border-radius: var(--r-md);
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 4px;
+  padding: 18px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised), var(--panel));
-  color: var(--text-dim);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.04);
+}
+
+.controls__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 22px;
+}
+
+.controls__row--foot {
+  align-items: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field--fixed {
+  flex: 0 0 auto;
+}
+
+/* Basis is a min-width so segments stretch to fill the row; a two-option
+   toggle needs less room than the three-option Families group. */
+.field--seg {
+  flex: 1 1 260px;
+}
+
+.field--narrow {
+  flex: 0 1 168px;
+}
+
+.field__label {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  cursor: pointer;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
-.controls button.on {
-  color: var(--amber-bright);
-  box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.3);
-}
-.generate {
-  margin-left: auto;
-  color: var(--amber-bright) !important;
-}
-.controls input {
-  width: 64px;
-  padding: 7px 8px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--edge);
+
+.segment {
+  display: flex;
+  width: 100%;
+  padding: 4px;
+  gap: 4px;
   background: #100e0c;
-  color: var(--text);
-  font-family: var(--font-mono);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset);
 }
+
+.segment__btn {
+  flex: 1 1 auto;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.segment__btn:hover {
+  color: var(--text);
+}
+
+.segment__btn.is-active {
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  border-color: var(--edge);
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), 0 0 0 1px rgba(255, 157, 60, 0.18);
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline__sep {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.controls__go {
+  margin-left: auto;
+  min-width: 160px;
+}
+
 .screen {
   border-radius: var(--r-lg);
   padding: 10px;
@@ -259,5 +371,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   color: var(--danger);
   font-size: 0.88rem;
   margin: 0;
+}
+
+@media (max-width: 560px) {
+  .controls {
+    padding: 14px;
+    gap: 14px;
+  }
+  .controls__row {
+    gap: 14px 16px;
+  }
+  .field--seg,
+  .field--narrow {
+    flex: 1 1 100%;
+  }
+  .segment {
+    flex-wrap: wrap;
+  }
+  .segment__btn {
+    flex: 1 1 42%;
+    padding: 9px 10px;
+    font-size: 0.85rem;
+  }
+  .controls__go {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>
