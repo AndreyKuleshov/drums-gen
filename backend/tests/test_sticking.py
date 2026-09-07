@@ -1,4 +1,10 @@
-from drumgen.sticking_generator import VOCAB, mirror, rules_hold
+from fractions import Fraction
+
+import pytest
+
+from drumgen.domain.models import Phrase, TimeSignature
+from drumgen.generator import GenerationError
+from drumgen.sticking_generator import VOCAB, StickingRequest, generate_sticking, mirror, rules_hold
 
 
 def test_vocab_has_three_families_with_expected_lengths():
@@ -38,3 +44,78 @@ def test_rule2_no_more_than_two_ghosts_per_hand_in_a_row():
     assert not rules_hold((("R", True), ("L", False), ("L", False), ("L", False)))  # 3 ghosts
     # ghost hand change resets the run
     assert rules_hold((("L", False), ("L", False), ("R", False), ("R", False)))
+
+
+_44 = TimeSignature(num=4, den=4)
+
+
+def _req(**kw: object) -> StickingRequest:
+    base: dict[str, object] = {
+        "time_sig": _44,
+        "num_bars": 1,
+        "subdivision": Fraction(1, 16),
+        "tempo_bpm": 100,
+    }
+    base.update(kw)
+    return StickingRequest.model_validate(base)
+
+
+def _stream(phrase: Phrase) -> list[tuple[str, bool]]:
+    return [(s.hand.value, s.accent) for bar in phrase.bars for s in bar.strokes]
+
+
+def test_fills_exact_note_count_per_bar():
+    phrase = generate_sticking(_req(num_bars=2, subdivision=Fraction(1, 16), seed=1))
+    assert len(phrase.bars) == 2
+    for bar in phrase.bars:
+        assert len(bar.strokes) == 16  # 4/4 at 1/16
+        assert all(s.duration == Fraction(1, 16) for s in bar.strokes)
+
+
+def test_every_note_is_accent_xor_ghost():
+    phrase = generate_sticking(_req(num_bars=4, seed=3))
+    for bar in phrase.bars:
+        for s in bar.strokes:
+            assert s.accent != s.ghost  # exactly one is true
+
+
+@pytest.mark.parametrize("seed", range(30))
+def test_generated_phrase_always_satisfies_both_rules(seed: int):
+    phrase = generate_sticking(_req(num_bars=4, subdivision=Fraction(1, 16), seed=seed))
+    assert rules_hold(_stream(phrase))
+
+
+def test_family_toggles_are_respected_singles_only():
+    # Singles are all accents; with only singles enabled, no ghosts appear.
+    phrase = generate_sticking(_req(num_bars=2, singles=True, odd=False, paradiddle=False, seed=5))
+    assert all(s.accent and not s.ghost for bar in phrase.bars for s in bar.strokes)
+
+
+def test_each_family_alone_can_fill_a_bar():
+    for fam in ("singles", "odd", "paradiddle"):
+        kw: dict[str, object] = {"singles": False, "odd": False, "paradiddle": False, fam: True}
+        phrase = generate_sticking(_req(num_bars=1, subdivision=Fraction(1, 16), seed=2, **kw))
+        assert len(phrase.bars[0].strokes) == 16
+
+
+def test_deterministic_for_a_fixed_seed():
+    a = generate_sticking(_req(num_bars=3, seed=42)).model_dump()
+    b = generate_sticking(_req(num_bars=3, seed=42)).model_dump()
+    assert a == b
+
+
+def test_eighth_subdivision_uses_eight_notes_per_bar():
+    phrase = generate_sticking(_req(num_bars=1, subdivision=Fraction(1, 8), seed=1))
+    assert len(phrase.bars[0].strokes) == 8
+    assert all(s.duration == Fraction(1, 8) for s in phrase.bars[0].strokes)
+
+
+def test_no_family_enabled_raises():
+    with pytest.raises(GenerationError):
+        generate_sticking(_req(singles=False, odd=False, paradiddle=False))
+
+
+def test_subdivision_that_does_not_divide_the_bar_raises():
+    # 4/4 bar length 1; 1 / (3/8) = 8/3 is not a whole number of notes.
+    with pytest.raises(GenerationError):
+        generate_sticking(_req(subdivision=Fraction(3, 8)))
