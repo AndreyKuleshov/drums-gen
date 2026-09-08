@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
+import { sampleLoad } from '../lib/samples'
 import { persistedRef } from '../lib/storage'
 import {
   parseFraction,
@@ -41,9 +42,14 @@ const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
 // True while the first Play is fetching/decoding the kit samples — playback can't
-// start until they're loaded, so we show a spinner instead of a dead button.
+// start until they're loaded, so the button is disabled and a modal is shown.
 const preparing = ref(false)
 const clicking = ref(false)
+
+// Sample-load progress for the "Loading samples…" modal (0–100).
+const loadPct = computed(() =>
+  sampleLoad.total > 0 ? Math.round((sampleLoad.loaded / sampleLoad.total) * 100) : 0,
+)
 // Metronome + transport prefs are shared across modes (one source of truth).
 const metronome = persistedRef('metronome', false)
 const loop = persistedRef('loop', false)
@@ -145,34 +151,14 @@ onBeforeUnmount(() => stopPhrase())
       <div class="cluster">
         <button
           class="play"
-          :class="{ 'is-playing': playing, 'is-loading': preparing }"
+          :class="{ 'is-playing': playing }"
           :disabled="!canPlay || preparing"
           :aria-label="preparing ? 'Loading sounds' : playing ? 'Playing' : 'Play'"
           :aria-busy="preparing || undefined"
-          :data-tip="preparing ? 'Loading sounds…' : 'Play / Stop (Space)'"
-          data-tip-pos="below" data-tip-align="left"
+          data-tip="Play / Stop (Space)" data-tip-pos="below" data-tip-align="left"
           @click="onPlay"
         >
-          <svg
-            v-if="preparing"
-            class="play__spinner"
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            aria-hidden="true"
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r="8"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-dasharray="38 60"
-            />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
           </svg>
         </button>
@@ -322,6 +308,24 @@ onBeforeUnmount(() => stopPhrase())
       </div>
     </section>
   </div>
+
+  <Teleport to="body">
+    <div v-if="sampleLoad.active" class="loadmodal" role="status" aria-live="polite">
+      <div class="loadmodal__card">
+        <p class="loadmodal__title">Loading samples…</p>
+        <div
+          class="loadmodal__bar"
+          role="progressbar"
+          :aria-valuenow="loadPct"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <span class="loadmodal__fill" :style="{ width: loadPct + '%' }" />
+        </div>
+        <p class="loadmodal__count">{{ sampleLoad.loaded }} / {{ sampleLoad.total }}</p>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -427,25 +431,6 @@ onBeforeUnmount(() => stopPhrase())
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-/* Loading sounds: an amber spinner instead of the play glyph. The button is
-   disabled while loading, so override the dimming so it still reads as "working"
-   (higher specificity than .play:disabled). */
-.play.is-loading,
-.play.is-loading:disabled {
-  color: var(--amber-bright);
-  filter: none;
-}
-
-.play__spinner {
-  transform-origin: center;
-  animation: play-spin 0.72s linear infinite;
-}
-
-@keyframes play-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 .stop {
   width: 44px;
@@ -706,6 +691,75 @@ onBeforeUnmount(() => stopPhrase())
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
+  }
+}
+
+/* "Loading samples…" modal — shown while the first play fetches the kit samples.
+   Teleported to <body>; the scoped id rides along so these styles still apply. */
+.loadmodal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 6, 4, 0.62);
+  backdrop-filter: blur(3px);
+  animation: loadmodal-in 0.18s ease-out;
+}
+
+.loadmodal__card {
+  min-width: 268px;
+  max-width: 88vw;
+  padding: 22px 24px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  box-shadow: var(--shadow-2), 0 0 28px -8px var(--amber-glow);
+  text-align: center;
+}
+
+.loadmodal__title {
+  margin: 0 0 14px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber-bright);
+}
+
+.loadmodal__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #100e0c;
+  border: 1px solid var(--edge);
+  box-shadow: var(--inset);
+  overflow: hidden;
+}
+
+.loadmodal__fill {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--amber), var(--amber-bright));
+  box-shadow: 0 0 10px -2px var(--amber-glow);
+  transition: width 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.loadmodal__count {
+  margin: 9px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+@keyframes loadmodal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 </style>

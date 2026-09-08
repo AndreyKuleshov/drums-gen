@@ -1,5 +1,6 @@
 import * as Tone from 'tone'
 
+import { beginSampleLoad, markSampleLoaded } from './samples'
 import type { Phrase } from '../types'
 
 export function parseFraction(s: string): number {
@@ -55,7 +56,10 @@ function sampleUrl(name: string): string {
 }
 let snareBuffer: Tone.ToneAudioBuffer | null = null
 function snareBuf(): Tone.ToneAudioBuffer {
-  if (snareBuffer === null) snareBuffer = new Tone.ToneAudioBuffer(sampleUrl('snare.wav'))
+  if (snareBuffer === null) {
+    beginSampleLoad(1)
+    snareBuffer = new Tone.ToneAudioBuffer(sampleUrl('snare.wav'), () => markSampleLoaded())
+  }
   return snareBuffer
 }
 function playSnare(time: number, velocity: number): void {
