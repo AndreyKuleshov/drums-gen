@@ -43,6 +43,9 @@ asyncio_mode = "auto"
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# scripts/ holds one-off dev generators (e.g. the fill-seed builder), not
+# shipped runtime code — kept out of the strict lint/type surface.
+extend-exclude = ["scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ANN", "PT"]
