@@ -20,7 +20,14 @@ import { combinedOnsetsWhole } from '../lib/kit'
 import type { GrooveBar, Hit } from '../types'
 import type { Groove } from '../types'
 
-const props = defineProps<{ groove: Groove; activeStep?: number | null }>()
+const props = defineProps<{
+  groove: Groove
+  activeStep?: number | null
+  /** Label hi-hat notes with their R/L hand too (Patterns 2.0, where the hat
+   * carries real sticking). Off by default so a groove's hat ostinato stays
+   * unlabelled. */
+  labelHihat?: boolean
+}>()
 const container = ref<HTMLDivElement | null>(null)
 
 // Kit staff positions and notehead glyphs (percussion clef, stems up = hands).
@@ -102,14 +109,17 @@ interface CellInfo {
   art: string
 }
 
-// Sticking is printed only for the MELODIC hand (snare / toms) — the hi-hat is a
-// timekeeping ostinato, so labelling every hat with its (right) hand just reads as
-// a max-two-rule violation on a groove. Pure hi-hat cells get no letter.
+// Sticking is printed for the MELODIC hand (snare / toms). The hi-hat is normally
+// a timekeeping ostinato, so labelling every hat with its (right) hand just reads
+// as noise on a groove — unless `labelHihat` opts in (Patterns 2.0, where the hat
+// is part of the sticking). A pure hi-hat cell then shows its hand.
 function stickingHand(hits: Hit[]): 'R' | 'L' | null {
-  const lead = hits.find(
+  const melodic = hits.find(
     (h) => h.surface !== 'hihat' && h.surface !== 'hihat_open' && h.hand,
   )
-  return lead?.hand ?? null
+  if (melodic?.hand) return melodic.hand
+  if (props.labelHihat) return hits.find((h) => h.hand)?.hand ?? null
+  return null
 }
 
 function keysFor(hits: Hit[]): CellInfo {

@@ -135,7 +135,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <GrooveScore v-if="groove" :groove="groove" :active-step="activeStep" />
+          <GrooveScore v-if="groove" :groove="groove" :active-step="activeStep" label-hihat />
           <ScoreView v-else-if="phrase" :phrase="phrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <p class="screen__empty-text">
