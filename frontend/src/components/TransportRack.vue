@@ -40,6 +40,9 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'step', index: number | null): void }>()
 
 const playing = ref(false)
+// True while the first Play is fetching/decoding the kit samples — playback can't
+// start until they're loaded, so we show a spinner instead of a dead button.
+const preparing = ref(false)
 const clicking = ref(false)
 // Metronome + transport prefs are shared across modes (one source of truth).
 const metronome = persistedRef('metronome', false)
@@ -66,19 +69,26 @@ watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
 
 async function onPlay(): Promise<void> {
-  if (!props.canPlay) return
+  if (!props.canPlay || preparing.value) return
   clicking.value = false
-  playing.value = true
-  await props.engine.play({
-    metronome: metronome.value,
-    loop: loop.value,
-    tempoBpm: props.tempo,
-    prerollBars: preroll.value ? prerollBars.value : 0,
-    onStep: (index) => emit('step', index),
-    onEnd: () => {
-      playing.value = false
-    },
-  })
+  preparing.value = true
+  try {
+    // Resolves only once the samples are loaded and the transport has started,
+    // so `preparing` spans exactly the (first-play) loading window.
+    await props.engine.play({
+      metronome: metronome.value,
+      loop: loop.value,
+      tempoBpm: props.tempo,
+      prerollBars: preroll.value ? prerollBars.value : 0,
+      onStep: (index) => emit('step', index),
+      onEnd: () => {
+        playing.value = false
+      },
+    })
+    playing.value = true
+  } finally {
+    preparing.value = false
+  }
 }
 
 async function startMetronome(): Promise<void> {
@@ -135,13 +145,34 @@ onBeforeUnmount(() => stopPhrase())
       <div class="cluster">
         <button
           class="play"
-          :class="{ 'is-playing': playing }"
-          :disabled="!canPlay"
-          :aria-label="playing ? 'Playing' : 'Play'"
-          data-tip="Play / Stop (Space)" data-tip-pos="below" data-tip-align="left"
+          :class="{ 'is-playing': playing, 'is-loading': preparing }"
+          :disabled="!canPlay || preparing"
+          :aria-label="preparing ? 'Loading sounds' : playing ? 'Playing' : 'Play'"
+          :aria-busy="preparing || undefined"
+          :data-tip="preparing ? 'Loading sounds…' : 'Play / Stop (Space)'"
+          data-tip-pos="below" data-tip-align="left"
           @click="onPlay"
         >
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <svg
+            v-if="preparing"
+            class="play__spinner"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            aria-hidden="true"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-dasharray="38 60"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
           </svg>
         </button>
@@ -394,6 +425,26 @@ onBeforeUnmount(() => stopPhrase())
   border-color: var(--amber-dim);
   box-shadow: var(--shadow-2), 0 0 26px -3px var(--amber-glow);
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Loading sounds: an amber spinner instead of the play glyph. The button is
+   disabled while loading, so override the dimming so it still reads as "working"
+   (higher specificity than .play:disabled). */
+.play.is-loading,
+.play.is-loading:disabled {
+  color: var(--amber-bright);
+  filter: none;
+}
+
+.play__spinner {
+  transform-origin: center;
+  animation: play-spin 0.72s linear infinite;
+}
+
+@keyframes play-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .stop {
