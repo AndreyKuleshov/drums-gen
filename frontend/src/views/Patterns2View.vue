@@ -50,6 +50,10 @@ const grooveEngine: PlayEngine = {
 const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine : phraseEngine))
 
 async function generate(): Promise<void> {
+  // Regenerating stops any playing pattern (same as the Studio tab), so the old
+  // pattern doesn't keep sounding under the new one.
+  transport.value?.stop()
+  activeStep.value = null
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
     error.value = 'Enable at least one block family.'

@@ -211,6 +211,22 @@ def test_kit_accents_are_accents_and_ghosts_are_ghosts():
                 assert h.surface is Surface.SNARE
 
 
+def test_kit_kick_pattern_varies_across_seeds():
+    # The kick must not be identical every time — across seeds the feet onset
+    # sets should show several distinct patterns.
+    patterns: set[tuple[str, ...]] = set()
+    for seed in range(12):
+        g = generate_sticking(_req(num_bars=1, seed=seed, voicing="kit"))
+        assert isinstance(g, Groove)
+        patterns.add(tuple(sorted(str(f.onset) for f in g.bars[0].feet)))
+    assert len(patterns) >= 3
+    # ...but the downbeat anchor is always present.
+    for seed in range(12):
+        g = generate_sticking(_req(num_bars=1, seed=seed, voicing="kit"))
+        assert isinstance(g, Groove)
+        assert any(f.onset == 0 for f in g.bars[0].feet)
+
+
 def test_kit_is_deterministic_for_a_fixed_seed():
     a = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()
     b = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()

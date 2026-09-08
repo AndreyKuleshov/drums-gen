@@ -144,6 +144,7 @@ def _pack(total: int, candidates: list[Block], rng: random.Random) -> list[Note]
 # accented melody moves snare -> high -> mid -> low tom.
 _LEAD_ORDER = [Surface.SNARE, Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW]
 _KICK_DUR = Fraction(1, 16)
+_EIGHTH = Fraction(1, 8)
 
 
 def generate_sticking(req: StickingRequest) -> Phrase | Groove:
@@ -211,6 +212,14 @@ def _orchestrate_kit(
     notes_per_beat = max(1, per_bar // num_beats)
     lead_start = rng.randrange(len(_LEAD_ORDER))
 
+    # Eighth-grid positions (excluding the downbeat) that kick syncopations can
+    # land on — sampled per bar so the kick isn't identical every time.
+    eighth_grid: list[Fraction] = []
+    pos = _EIGHTH
+    while pos < ts.bar_length:
+        eighth_grid.append(pos)
+        pos += _EIGHTH
+
     bars: list[GrooveBar] = []
     for b in range(req.num_bars):
         chunk = stream[b * per_bar : (b + 1) * per_bar]
@@ -228,12 +237,13 @@ def _orchestrate_kit(
                 surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
                 hands.append(Hit(onset=onset, duration=sub, surface=surface, hand=hand, ghost=True))
 
-        # Kick foundation on beats 1 & 3, plus a landing kick under the last
-        # stroke of the phrase's final bar.
+        # Kick foundation: a downbeat anchor plus 1-3 syncopations sampled off the
+        # eighth grid (varied per bar), and a landing kick under the last stroke
+        # of the phrase's final bar.
         feet: list[Hit] = [Hit(onset=Fraction(0), duration=_KICK_DUR, surface=Surface.KICK)]
-        if num_beats >= 4:
-            mid = (num_beats // 2) * beat_len
-            feet.append(Hit(onset=mid, duration=_KICK_DUR, surface=Surface.KICK))
+        count = min(rng.randint(1, 3), len(eighth_grid))
+        for onset in rng.sample(eighth_grid, count):
+            feet.append(Hit(onset=onset, duration=_KICK_DUR, surface=Surface.KICK))
         if b == req.num_bars - 1 and chunk:
             land = (len(chunk) - 1) * sub
             if land > 0 and all(f.onset != land for f in feet):
