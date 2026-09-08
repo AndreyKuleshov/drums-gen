@@ -5,6 +5,7 @@
 import * as Tone from 'tone'
 
 import { parseFraction, scheduleMetro, setOverlayClick } from './audio'
+import { beginSampleLoad, markSampleLoaded } from './samples'
 import type { Groove, Hit, Surface } from '../types'
 
 const SAMPLE_FILES: Record<Surface, string> = {
@@ -29,10 +30,12 @@ function sampleUrl(name: string): string {
 /** Load every sample buffer once and resolve when all are ready. */
 async function ensureLoaded(): Promise<Record<Surface, Tone.ToneAudioBuffer>> {
   if (buffers === null) {
+    const surfaces = Object.keys(SAMPLE_FILES) as Surface[]
+    beginSampleLoad(surfaces.length)
     buffers = Object.fromEntries(
-      (Object.keys(SAMPLE_FILES) as Surface[]).map((s) => [
+      surfaces.map((s) => [
         s,
-        new Tone.ToneAudioBuffer(sampleUrl(SAMPLE_FILES[s])),
+        new Tone.ToneAudioBuffer(sampleUrl(SAMPLE_FILES[s]), () => markSampleLoaded()),
       ]),
     ) as Record<Surface, Tone.ToneAudioBuffer>
   }
