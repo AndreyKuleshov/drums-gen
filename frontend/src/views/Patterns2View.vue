@@ -22,11 +22,11 @@ const paradiddle = persistedRef('patterns2-paradiddle', true)
 // 'snare' = pure sticking; 'kit' = orchestrated across the kit (polyphonic);
 // 'linear' = one line across the kit, at most one stroke at a time.
 type Voicing = 'snare' | 'kit' | 'linear'
-const voicing = persistedRef<Voicing>('patterns2-voicing', 'snare')
+const voicing = persistedRef<Voicing>('patterns2-voicing', 'linear')
 const voicings: { v: Voicing; label: string }[] = [
+  { v: 'linear', label: 'Linear' },
   { v: 'snare', label: 'Snare' },
   { v: 'kit', label: 'Kit' },
-  { v: 'linear', label: 'Linear' },
 ]
 // Subdivision doubles as a rhythm mode: '1/8'/'1/16' are uniform grids, 'mixed'
 // mixes both within a bar.
