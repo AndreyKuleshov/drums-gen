@@ -241,6 +241,7 @@ onBeforeUnmount(() => {
           <ModeSwitch v-model="mode" @update:model-value="onModeChange" />
           <RouterLink to="/shortcuts" class="nav-link" title="Keyboard shortcuts">⌨ Shortcuts</RouterLink>
           <RouterLink to="/rudiments" class="nav-link">Rudiments &rarr;</RouterLink>
+          <RouterLink to="/patterns2" class="nav-link">Patterns 2.0 &rarr;</RouterLink>
           <AuthNav />
           <span class="led led--on" aria-hidden="true" />
         </div>

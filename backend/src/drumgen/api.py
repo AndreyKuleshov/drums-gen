@@ -17,6 +17,7 @@ from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
 from drumgen.groove_generator import GrooveRequest, generate_groove
 from drumgen.patterns.router import router as patterns_router
+from drumgen.sticking_generator import StickingRequest, generate_sticking
 
 
 @asynccontextmanager
@@ -61,6 +62,13 @@ def post_generate(req: GenerateRequest) -> Phrase:
 @app.post("/pattern/generate", response_model=Groove)
 def post_generate_pattern(req: GrooveRequest) -> Groove:
     return generate_groove(req)
+
+
+# Returns a monophonic Phrase for voicing="snare" or a polyphonic Groove for
+# voicing="kit"; response_model=None lets FastAPI serialize whichever it is.
+@app.post("/patterns2/generate", response_model=None)
+def post_generate_patterns2(req: StickingRequest) -> Phrase | Groove:
+    return generate_sticking(req)
 
 
 _FILLER_RUDIMENTS = frozenset({"single", "double"})

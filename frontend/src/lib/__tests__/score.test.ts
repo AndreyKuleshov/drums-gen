@@ -33,6 +33,7 @@ describe('barToNoteSpecs', () => {
           duration: '1/4',
           hand: 'R',
           accent: true,
+          ghost: false,
           articulation: 'normal',
           surface: 'snare',
           grace: 0,
@@ -41,7 +42,7 @@ describe('barToNoteSpecs', () => {
       ],
     }
     expect(barToNoteSpecs(bar)).toEqual([
-      { duration: 'q', accent: true, sticking: 'R', grace: 0, group: 0 },
+      { duration: 'q', accent: true, ghost: false, sticking: 'R', grace: 0, group: 0 },
     ])
   })
 })
@@ -50,6 +51,7 @@ describe('beamGroups', () => {
   const spec = (duration: string, group: number): NoteSpec => ({
     duration,
     accent: false,
+    ghost: false,
     sticking: 'R',
     grace: 0,
     group,

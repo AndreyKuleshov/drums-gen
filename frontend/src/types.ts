@@ -11,6 +11,8 @@ export interface Stroke {
   duration: string
   hand: 'L' | 'R'
   accent: boolean
+  /** True for a ghost note (played soft). Mutually exclusive with `accent`. */
+  ghost: boolean
   articulation: string
   surface: string
   /** Grace notes ornamenting this stroke: 0 = none, 1 = flam, 2 = drag. */

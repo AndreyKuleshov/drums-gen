@@ -14,6 +14,11 @@ export const router = createRouter({
       component: () => import('../views/RudimentsView.vue'),
     },
     {
+      path: '/patterns2',
+      name: 'patterns2',
+      component: () => import('../views/Patterns2View.vue'),
+    },
+    {
       path: '/shortcuts',
       name: 'shortcuts',
       component: () => import('../views/ShortcutsView.vue'),

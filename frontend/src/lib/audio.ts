@@ -22,7 +22,7 @@ export function scheduleTimes(phrase: Phrase, tempoBpm: number = phrase.tempo_bp
     for (const stroke of bar.strokes) {
       events.push({
         timeSec: elapsedWhole * wholeNoteSec,
-        velocity: stroke.accent ? 1.0 : 0.6,
+        velocity: stroke.accent ? 1.0 : stroke.ghost ? 0.15 : 0.6,
         hand: stroke.hand,
         grace: stroke.grace,
       })
@@ -95,9 +95,6 @@ type ClickLevel = 'down' | 'beat' | 'sub'
 const CLICK_HZ: Record<ClickLevel, number> = { down: 2000, beat: 1400, sub: 950 }
 const CLICK_VEL: Record<ClickLevel, number> = { down: 1, beat: 0.7, sub: 0.32 }
 
-function hit(time: number, accent: boolean): void {
-  playSnare(time, accent ? 1 : 0.62)
-}
 
 let clickVolumeDb = -10
 
@@ -223,7 +220,9 @@ export async function playPhrase(phrase: Phrase, opts: PlayOptions = {}): Promis
       }, Math.max(0, prerollSec + event.timeSec - lead))
     }
     transport.schedule((time) => {
-      hit(time, event.velocity >= 1)
+      // Play at the note's true velocity (accent 1.0 / ghost 0.15 / normal 0.6),
+      // not a binary accent flag — otherwise ghosts sound as loud as normal hits.
+      playSnare(time, event.velocity)
       draw.schedule(() => opts.onStep?.(index), time)
     }, prerollSec + event.timeSec)
   })

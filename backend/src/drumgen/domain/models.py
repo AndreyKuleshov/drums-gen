@@ -28,6 +28,9 @@ class Stroke(BaseModel):
     duration: FractionField
     hand: Hand
     accent: bool = False
+    ghost: bool = False
+    """True for a ghost note (played soft). Mutually exclusive with `accent`.
+    Defaults False so existing generators are unaffected."""
     articulation: Articulation = Articulation.NORMAL
     surface: Surface = Surface.SNARE
     grace: int = 0

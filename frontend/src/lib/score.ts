@@ -29,6 +29,8 @@ export function vexDuration(subdivision: string): string {
 export interface NoteSpec {
   duration: string
   accent: boolean
+  /** True for a ghost note; rendered with a parenthesized notehead. */
+  ghost: boolean
   sticking: 'L' | 'R'
   /** Grace notes before this note: 0 = none, 1 = flam, 2 = drag. */
   grace: number
@@ -40,6 +42,7 @@ export function barToNoteSpecs(bar: Bar): NoteSpec[] {
   return bar.strokes.map((s) => ({
     duration: vexDuration(s.duration),
     accent: s.accent,
+    ghost: s.ghost,
     sticking: s.hand,
     grace: s.grace,
     group: s.group,
