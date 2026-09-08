@@ -14,9 +14,24 @@ function bump(dir: number): void {
   emit('update:modelValue', clamp(props.modelValue + dir * (props.step ?? 1)))
 }
 
+// While typing, only cap the MAX; the min-clamp is deferred to blur. Otherwise a
+// value whose leading digits are below the min (e.g. "1" on the way to "150")
+// snaps up to the min on the first keystroke, making it impossible to type.
 function onInput(event: Event): void {
-  const raw = Number((event.target as HTMLInputElement).value)
-  if (!Number.isNaN(raw)) emit('update:modelValue', clamp(raw))
+  const el = event.target as HTMLInputElement
+  if (el.value === '') return // allow an empty field mid-edit; blur will settle it
+  const raw = Number(el.value)
+  if (!Number.isNaN(raw)) emit('update:modelValue', Math.min(props.max, raw))
+}
+
+// Settle the field when it loses focus: clamp to [min, max] and reflect the
+// clamped value even if the model didn't change.
+function onBlur(event: Event): void {
+  const el = event.target as HTMLInputElement
+  const raw = Number(el.value)
+  const value = clamp(el.value === '' || Number.isNaN(raw) ? props.min : raw)
+  emit('update:modelValue', value)
+  el.value = String(value)
 }
 </script>
 
@@ -40,6 +55,7 @@ function onInput(event: Event): void {
       :max="max"
       :aria-label="label"
       @input="onInput"
+      @blur="onBlur"
     />
     <button
       type="button"
