@@ -96,10 +96,14 @@ class StickingRequest(BaseModel):
     singles: bool = True
     odd: bool = True
     paradiddle: bool = True
-    voicing: Literal["snare", "kit"] = "snare"
+    mixed: bool = False
+    """Mix 1/8 and 1/16 durations within a bar (per-beat) instead of a uniform
+    grid. When true, `subdivision` is ignored (the finest grid is 1/16)."""
+    voicing: Literal["snare", "kit", "linear"] = "snare"
     """'snare' = pure sticking on the snare (monophonic Phrase); 'kit' = the same
-    sticking orchestrated across the kit — accents ride snare/toms, ghosts split
-    to hi-hat (right hand) and snare (left), kick woven underneath (Groove)."""
+    sticking orchestrated across the kit with a simultaneous kick foundation
+    (polyphonic Groove); 'linear' = orchestrated across the kit as a single line
+    where at most one stroke sounds at a time — kick woven in, no simultaneity."""
     seed: int | None = None
 
 
@@ -143,8 +147,57 @@ def _pack(total: int, candidates: list[Block], rng: random.Random) -> list[Note]
 # Accents "ride" across the kit: the lead surface advances each beat, so the
 # accented melody moves snare -> high -> mid -> low tom.
 _LEAD_ORDER = [Surface.SNARE, Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW]
-_KICK_DUR = Fraction(1, 16)
+_SIXTEENTH = Fraction(1, 16)
+_KICK_DUR = _SIXTEENTH
 _EIGHTH = Fraction(1, 8)
+
+# A rhythm slot is a (onset, duration) pair within a bar; a bar is a list of them.
+Slots = list[list[tuple[Fraction, Fraction]]]
+
+
+_MIXED_MIN_UNIT = _SIXTEENTH  # the fine grid mixed durations are built on
+
+
+def _mixed_cell(k: int, rng: random.Random) -> list[int]:
+    """A random composition of 1s (a 1/16) and 2s (a 1/8) summing to `k` sixteenth
+    units — one beat's worth of mixed durations."""
+    cell: list[int] = []
+    remaining = k
+    while remaining > 0:
+        piece = 1 if remaining == 1 else rng.choice((1, 2))
+        cell.append(piece)
+        remaining -= piece
+    return cell
+
+
+def _rhythm_slots(req: StickingRequest, rng: random.Random) -> Slots:
+    """Per-bar (onset, duration) slots: uniform at `subdivision`, or — when
+    `mixed` — a per-beat random mix of 1/8 and 1/16 notes."""
+    ts = req.time_sig
+    bar_len = ts.bar_length
+    slots: Slots = []
+    if req.mixed:
+        beat_len = ts.beat_length
+        num_beats = int(bar_len / beat_len)
+        per_beat = beat_len / _MIXED_MIN_UNIT
+        if per_beat.denominator != 1:
+            raise GenerationError("Mixed durations need a 1/16-divisible beat.")
+        k = int(per_beat)
+        for _bar in range(req.num_bars):
+            onset = Fraction(0)
+            bar: list[tuple[Fraction, Fraction]] = []
+            for _beat in range(num_beats):
+                for unit in _mixed_cell(k, rng):
+                    dur = _MIXED_MIN_UNIT * unit
+                    bar.append((onset, dur))
+                    onset += dur
+            slots.append(bar)
+    else:
+        sub = req.subdivision
+        per_bar = int(bar_len / sub)
+        for _bar in range(req.num_bars):
+            slots.append([(j * sub, sub) for j in range(per_bar)])
+    return slots
 
 
 def generate_sticking(req: StickingRequest) -> Phrase | Groove:
@@ -152,68 +205,73 @@ def generate_sticking(req: StickingRequest) -> Phrase | Groove:
     if not candidates:
         raise GenerationError("Enable at least one block family.")
 
-    bar_len = req.time_sig.bar_length
-    per_bar_exact = bar_len / req.subdivision
+    # Guard on the finest possible grid (1/16 when mixed) before building slots,
+    # so pathological meters/subdivisions raise instead of doing unbounded work.
+    finest = _SIXTEENTH if req.mixed else req.subdivision
+    per_bar_exact = req.time_sig.bar_length / finest
     if per_bar_exact.denominator != 1:
         raise GenerationError("Subdivision must divide the bar into whole notes.")
-    per_bar = int(per_bar_exact)
-    total = per_bar * req.num_bars
-
-    if total > _MAX_NOTES:
+    max_total = int(per_bar_exact) * req.num_bars
+    if max_total > _MAX_NOTES:
         raise GenerationError(
-            f"Phrase too large ({total} notes); reduce bars or use a coarser subdivision."
+            f"Phrase too large ({max_total} notes); reduce bars or use a coarser subdivision."
         )
 
     rng = random.Random(req.seed)
+    slots = _rhythm_slots(req, rng)
+    total = sum(len(bar) for bar in slots)
     stream = _pack(total, candidates, rng)
 
+    if req.voicing == "linear":
+        return _orchestrate_linear(stream, slots, req, rng)
     if req.voicing == "kit":
-        return _orchestrate_kit(stream, per_bar, req, rng)
-    return _snare_phrase(stream, per_bar, req)
+        return _orchestrate_kit(stream, slots, req, rng)
+    return _snare_phrase(stream, slots, req)
 
 
-def _snare_phrase(stream: list[Note], per_bar: int, req: StickingRequest) -> Phrase:
+def _out_subdivision(req: StickingRequest) -> Fraction:
+    """The `subdivision` metadata on the output model — the finest grid used."""
+    return _SIXTEENTH if req.mixed else req.subdivision
+
+
+def _snare_phrase(stream: list[Note], slots: Slots, req: StickingRequest) -> Phrase:
     """Pure sticking: every stroke on the snare, monophonic Phrase."""
     bars: list[Bar] = []
-    for b in range(req.num_bars):
-        chunk = stream[b * per_bar : (b + 1) * per_bar]
-        strokes = [
-            Stroke(
-                duration=req.subdivision,
-                hand=Hand(hand),
-                accent=accent,
-                ghost=not accent,
-            )
-            for hand, accent in chunk
-        ]
+    idx = 0
+    for bar_slots in slots:
+        strokes: list[Stroke] = []
+        for _onset, dur in bar_slots:
+            hand, accent = stream[idx]
+            idx += 1
+            strokes.append(Stroke(duration=dur, hand=Hand(hand), accent=accent, ghost=not accent))
         bars.append(Bar(time_sig=req.time_sig, strokes=strokes))
 
     return Phrase(
         time_sig=req.time_sig,
         tempo_bpm=req.tempo_bpm,
-        subdivision=req.subdivision,
+        subdivision=_out_subdivision(req),
         accent_mode=AccentMode.RUDIMENT,
         bars=bars,
     )
 
 
+def _lead_surface(onset: Fraction, beat_len: Fraction, lead_start: int, bar: int) -> Surface:
+    """Accented lead surface for `onset` — steps snare -> high -> mid -> low tom
+    each beat so the accents ride across the kit."""
+    beat_i = int(onset / beat_len)
+    return _LEAD_ORDER[(beat_i + lead_start + bar) % len(_LEAD_ORDER)]
+
+
 def _orchestrate_kit(
-    stream: list[Note], per_bar: int, req: StickingRequest, rng: random.Random
+    stream: list[Note], slots: Slots, req: StickingRequest, rng: random.Random
 ) -> Groove:
-    """Orchestrate the sticking across the kit: accents ride snare/toms (moving a
-    step down the kit each beat), ghosts split to hi-hat (right hand) and snare
-    (left hand), and a kick foundation (1 & 3) grounds it with a landing kick
-    under the final stroke. The R/L hand sequence and its two rules are preserved
-    exactly — only the surface each stroke lands on changes."""
+    """Accents ride snare/toms (moving a step down the kit each beat), ghosts split
+    to hi-hat (right hand) and snare (left), and a simultaneous kick foundation
+    (downbeat + sampled syncopations + landing) grounds it. Polyphonic Groove."""
     ts = req.time_sig
-    sub = req.subdivision
     beat_len = ts.beat_length
-    num_beats = max(1, int(ts.bar_length / beat_len))
-    notes_per_beat = max(1, per_bar // num_beats)
     lead_start = rng.randrange(len(_LEAD_ORDER))
 
-    # Eighth-grid positions (excluding the downbeat) that kick syncopations can
-    # land on — sampled per bar so the kick isn't identical every time.
     eighth_grid: list[Fraction] = []
     pos = _EIGHTH
     while pos < ts.bar_length:
@@ -221,39 +279,72 @@ def _orchestrate_kit(
         pos += _EIGHTH
 
     bars: list[GrooveBar] = []
-    for b in range(req.num_bars):
-        chunk = stream[b * per_bar : (b + 1) * per_bar]
+    idx = 0
+    for b, bar_slots in enumerate(slots):
         hands: list[Hit] = []
-        for j, (hand_char, accent) in enumerate(chunk):
+        for onset, dur in bar_slots:
+            hand_char, accent = stream[idx]
+            idx += 1
             hand = Hand(hand_char)
-            onset = j * sub
             if accent:
-                beat_i = j // notes_per_beat
-                surface = _LEAD_ORDER[(beat_i + lead_start + b) % len(_LEAD_ORDER)]
+                surface = _lead_surface(onset, beat_len, lead_start, b)
                 hands.append(
-                    Hit(onset=onset, duration=sub, surface=surface, hand=hand, accent=True)
+                    Hit(onset=onset, duration=dur, surface=surface, hand=hand, accent=True)
                 )
             else:
                 surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
-                hands.append(Hit(onset=onset, duration=sub, surface=surface, hand=hand, ghost=True))
+                hands.append(Hit(onset=onset, duration=dur, surface=surface, hand=hand, ghost=True))
 
-        # Kick foundation: a downbeat anchor plus 1-3 syncopations sampled off the
-        # eighth grid (varied per bar), and a landing kick under the last stroke
-        # of the phrase's final bar.
         feet: list[Hit] = [Hit(onset=Fraction(0), duration=_KICK_DUR, surface=Surface.KICK)]
         count = min(rng.randint(1, 3), len(eighth_grid))
         for onset in rng.sample(eighth_grid, count):
             feet.append(Hit(onset=onset, duration=_KICK_DUR, surface=Surface.KICK))
-        if b == req.num_bars - 1 and chunk:
-            land = (len(chunk) - 1) * sub
+        if b == req.num_bars - 1 and bar_slots:
+            land = bar_slots[-1][0]
             if land > 0 and all(f.onset != land for f in feet):
                 feet.append(Hit(onset=land, duration=_KICK_DUR, surface=Surface.KICK))
         feet.sort(key=lambda h: h.onset)
         bars.append(GrooveBar(time_sig=ts, hands=hands, feet=feet))
 
     return Groove(
-        time_sig=ts,
-        tempo_bpm=req.tempo_bpm,
-        subdivision=sub,
-        bars=bars,
+        time_sig=ts, tempo_bpm=req.tempo_bpm, subdivision=_out_subdivision(req), bars=bars
+    )
+
+
+def _orchestrate_linear(
+    stream: list[Note], slots: Slots, req: StickingRequest, rng: random.Random
+) -> Groove:
+    """A linear fill: one line across the whole kit with AT MOST ONE stroke per
+    onset. Accents ride snare/toms, ghosts land on hi-hat/snare, and some ghosts
+    are woven in as a kick (a foot, not a hand) — so hands and feet never share
+    an onset and nothing sounds simultaneously."""
+    ts = req.time_sig
+    beat_len = ts.beat_length
+    lead_start = rng.randrange(len(_LEAD_ORDER))
+
+    bars: list[GrooveBar] = []
+    idx = 0
+    for b, bar_slots in enumerate(slots):
+        hands: list[Hit] = []
+        feet: list[Hit] = []
+        for onset, dur in bar_slots:
+            hand_char, accent = stream[idx]
+            idx += 1
+            hand = Hand(hand_char)
+            if not accent and rng.random() < 0.3:
+                # A ghost becomes a kick — played by the foot, replacing the hand
+                # stroke, so only one voice sounds at this onset.
+                feet.append(Hit(onset=onset, duration=dur, surface=Surface.KICK))
+            elif accent:
+                surface = _lead_surface(onset, beat_len, lead_start, b)
+                hands.append(
+                    Hit(onset=onset, duration=dur, surface=surface, hand=hand, accent=True)
+                )
+            else:
+                surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
+                hands.append(Hit(onset=onset, duration=dur, surface=surface, hand=hand, ghost=True))
+        bars.append(GrooveBar(time_sig=ts, hands=hands, feet=feet))
+
+    return Groove(
+        time_sig=ts, tempo_bpm=req.tempo_bpm, subdivision=_out_subdivision(req), bars=bars
     )

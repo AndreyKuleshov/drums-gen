@@ -40,6 +40,25 @@ def test_kit_voicing_returns_a_groove():
     assert "hihat" in surfaces
 
 
+def test_linear_voicing_returns_a_groove_with_no_simultaneous_strokes():
+    resp = client.post("/patterns2/generate", json=_body(seed=1, voicing="linear"))
+    assert resp.status_code == 200
+    data = resp.json()
+    for bar in data["bars"]:
+        hand_onsets = {h["onset"] for h in bar["hands"]}
+        foot_onsets = {f["onset"] for f in bar["feet"]}
+        assert not (hand_onsets & foot_onsets)  # linear: one stroke at a time
+
+
+def test_mixed_durations_returns_both_note_values():
+    resp = client.post("/patterns2/generate", json=_body(seed=1, mixed=True))
+    assert resp.status_code == 200
+    data = resp.json()
+    durs = {s["duration"] for bar in data["bars"] for s in bar["strokes"]}
+    assert "1/8" in durs
+    assert "1/16" in durs
+
+
 def test_no_family_enabled_returns_422():
     resp = client.post(
         "/patterns2/generate",

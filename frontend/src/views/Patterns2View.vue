@@ -19,11 +19,21 @@ const subdivision = persistedRef('patterns2-sub', '1/16')
 const singles = persistedRef('patterns2-singles', true)
 const odd = persistedRef('patterns2-odd', true)
 const paradiddle = persistedRef('patterns2-paradiddle', true)
-// 'snare' = pure sticking on the snare; 'kit' = orchestrated across the kit.
-const voicing = persistedRef<'snare' | 'kit'>('patterns2-voicing', 'snare')
-const voicings: { v: 'snare' | 'kit'; label: string }[] = [
+// 'snare' = pure sticking; 'kit' = orchestrated across the kit (polyphonic);
+// 'linear' = one line across the kit, at most one stroke at a time.
+type Voicing = 'snare' | 'kit' | 'linear'
+const voicing = persistedRef<Voicing>('patterns2-voicing', 'snare')
+const voicings: { v: Voicing; label: string }[] = [
   { v: 'snare', label: 'Snare' },
   { v: 'kit', label: 'Kit' },
+  { v: 'linear', label: 'Linear' },
+]
+// Subdivision doubles as a rhythm mode: '1/8'/'1/16' are uniform grids, 'mixed'
+// mixes both within a bar.
+const subdivisions: { value: string; label: string }[] = [
+  { value: '1/8', label: '1/8' },
+  { value: '1/16', label: '1/16' },
+  { value: 'mixed', label: 'Mixed' },
 ]
 
 const phrase = ref<Phrase | null>(null)
@@ -59,10 +69,12 @@ async function generate(): Promise<void> {
     error.value = 'Enable at least one block family.'
     return
   }
+  const mixed = subdivision.value === 'mixed'
   const body = JSON.stringify({
     time_sig: meter,
     num_bars: bars.value,
-    subdivision: subdivision.value,
+    subdivision: mixed ? '1/16' : subdivision.value,
+    mixed,
     tempo_bpm: tempo.value,
     singles: singles.value,
     odd: odd.value,
@@ -70,14 +82,14 @@ async function generate(): Promise<void> {
     voicing: voicing.value,
   })
   try {
-    // The endpoint returns a monophonic Phrase for 'snare' or a polyphonic
-    // Groove for 'kit'; fetch the shape we asked for and clear the other.
-    if (voicing.value === 'kit') {
-      groove.value = await apiFetch<Groove>('/patterns2/generate', { method: 'POST', body })
-      phrase.value = null
-    } else {
+    // 'snare' returns a monophonic Phrase; 'kit'/'linear' return a polyphonic
+    // Groove. Fetch the shape we asked for and clear the other.
+    if (voicing.value === 'snare') {
       phrase.value = await apiFetch<Phrase>('/patterns2/generate', { method: 'POST', body })
       groove.value = null
+    } else {
+      groove.value = await apiFetch<Groove>('/patterns2/generate', { method: 'POST', body })
+      phrase.value = null
     }
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : "Couldn’t generate. Is the engine running?"
@@ -176,7 +188,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
             </div>
           </div>
 
-          <div class="field field--seg field--narrow">
+          <div class="field field--seg">
             <span class="field__label">Voicing</span>
             <div class="segment" role="radiogroup" aria-label="Voicing">
               <button
@@ -193,19 +205,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
             </div>
           </div>
 
-          <div class="field field--seg field--narrow">
+          <div class="field field--seg">
             <span class="field__label">Subdivision</span>
             <div class="segment" role="radiogroup" aria-label="Subdivision">
               <button
-                v-for="s in ['1/8', '1/16']"
-                :key="s"
+                v-for="s in subdivisions"
+                :key="s.value"
                 type="button"
                 role="radio"
-                :aria-checked="subdivision === s"
-                :class="['segment__btn', { 'is-active': subdivision === s }]"
-                @click="subdivision = s"
+                :aria-checked="subdivision === s.value"
+                :class="['segment__btn', { 'is-active': subdivision === s.value }]"
+                @click="subdivision = s.value"
               >
-                {{ s }}
+                {{ s.label }}
               </button>
             </div>
           </div>
@@ -280,9 +292,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   flex: 1 1 260px;
 }
 
-.field--narrow {
-  flex: 0 1 168px;
-}
 
 .field__label {
   font-family: var(--font-mono);
@@ -385,8 +394,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   .controls__row {
     gap: 14px 16px;
   }
-  .field--seg,
-  .field--narrow {
+  .field--seg {
     flex: 1 1 100%;
   }
   .segment {

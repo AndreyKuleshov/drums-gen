@@ -231,3 +231,39 @@ def test_kit_is_deterministic_for_a_fixed_seed():
     a = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()
     b = generate_sticking(_req(num_bars=3, seed=42, voicing="kit")).model_dump()
     assert a == b
+
+
+def test_mixed_durations_uses_both_eighths_and_sixteenths():
+    g = generate_sticking(_req(num_bars=2, seed=1, mixed=True))
+    assert isinstance(g, Phrase)
+    durs = {s.duration for bar in g.bars for s in bar.strokes}
+    assert Fraction(1, 8) in durs
+    assert Fraction(1, 16) in durs
+
+
+def test_mixed_bars_sum_to_the_bar_length():
+    for seed in range(10):
+        g = generate_sticking(_req(num_bars=2, seed=seed, mixed=True))
+        assert isinstance(g, Phrase)
+        for bar in g.bars:
+            assert sum((s.duration for s in bar.strokes), Fraction(0)) == Fraction(1)
+
+
+def test_linear_has_at_most_one_stroke_per_onset():
+    for seed in range(20):
+        g = generate_sticking(_req(num_bars=2, seed=seed, voicing="linear"))
+        assert isinstance(g, Groove)
+        for bar in g.bars:
+            hand_onsets = [h.onset for h in bar.hands]
+            foot_onsets = [f.onset for f in bar.feet]
+            assert len(hand_onsets) == len(set(hand_onsets))  # no hand doubled
+            assert not (set(hand_onsets) & set(foot_onsets))  # hand & foot never share
+
+
+def test_linear_spreads_across_the_kit_including_kick():
+    g = generate_sticking(_req(num_bars=4, seed=2, voicing="linear"))
+    assert isinstance(g, Groove)
+    surfaces = {h.surface for bar in g.bars for h in bar.hands}
+    surfaces |= {f.surface for bar in g.bars for f in bar.feet}
+    assert Surface.KICK in surfaces
+    assert surfaces & {Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW}
