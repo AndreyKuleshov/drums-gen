@@ -267,3 +267,13 @@ def test_linear_spreads_across_the_kit_including_kick():
     surfaces |= {f.surface for bar in g.bars for f in bar.feet}
     assert Surface.KICK in surfaces
     assert surfaces & {Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW}
+
+
+def test_kit_kick_duration_matches_the_subdivision():
+    # In 1/8 mode the kick should read as an eighth note, not a faster 1/16.
+    g8 = generate_sticking(_req(num_bars=1, seed=1, voicing="kit", subdivision=Fraction(1, 8)))
+    assert isinstance(g8, Groove)
+    assert all(f.duration == Fraction(1, 8) for bar in g8.bars for f in bar.feet)
+    g16 = generate_sticking(_req(num_bars=1, seed=1, voicing="kit", subdivision=Fraction(1, 16)))
+    assert isinstance(g16, Groove)
+    assert all(f.duration == Fraction(1, 16) for bar in g16.bars for f in bar.feet)

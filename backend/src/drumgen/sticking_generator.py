@@ -148,7 +148,6 @@ def _pack(total: int, candidates: list[Block], rng: random.Random) -> list[Note]
 # accented melody moves snare -> high -> mid -> low tom.
 _LEAD_ORDER = [Surface.SNARE, Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW]
 _SIXTEENTH = Fraction(1, 16)
-_KICK_DUR = _SIXTEENTH
 _EIGHTH = Fraction(1, 8)
 
 # A rhythm slot is a (onset, duration) pair within a bar; a bar is a list of them.
@@ -271,6 +270,9 @@ def _orchestrate_kit(
     ts = req.time_sig
     beat_len = ts.beat_length
     lead_start = rng.randrange(len(_LEAD_ORDER))
+    # Notate the kick at the pattern's own note value so it doesn't read as a
+    # faster 16th under an 1/8 pattern.
+    kick_dur = _out_subdivision(req)
 
     eighth_grid: list[Fraction] = []
     pos = _EIGHTH
@@ -295,14 +297,14 @@ def _orchestrate_kit(
                 surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
                 hands.append(Hit(onset=onset, duration=dur, surface=surface, hand=hand, ghost=True))
 
-        feet: list[Hit] = [Hit(onset=Fraction(0), duration=_KICK_DUR, surface=Surface.KICK)]
+        feet: list[Hit] = [Hit(onset=Fraction(0), duration=kick_dur, surface=Surface.KICK)]
         count = min(rng.randint(1, 3), len(eighth_grid))
         for onset in rng.sample(eighth_grid, count):
-            feet.append(Hit(onset=onset, duration=_KICK_DUR, surface=Surface.KICK))
+            feet.append(Hit(onset=onset, duration=kick_dur, surface=Surface.KICK))
         if b == req.num_bars - 1 and bar_slots:
             land = bar_slots[-1][0]
             if land > 0 and all(f.onset != land for f in feet):
-                feet.append(Hit(onset=land, duration=_KICK_DUR, surface=Surface.KICK))
+                feet.append(Hit(onset=land, duration=kick_dur, surface=Surface.KICK))
         feet.sort(key=lambda h: h.onset)
         bars.append(GrooveBar(time_sig=ts, hands=hands, feet=feet))
 
