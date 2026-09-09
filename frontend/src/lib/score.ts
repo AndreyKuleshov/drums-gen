@@ -36,6 +36,10 @@ export interface NoteSpec {
   grace: number
   /** Rudiment-instance index carried from the backend; used to beam by phrase. */
   group: number
+  /** Vocabulary-block instance (Patterns 2.0) for a labelled bracket; -1 = none. */
+  block: number
+  /** Short label for the block bracket, e.g. 'Para', '5'. */
+  blockLabel: string
 }
 
 export function barToNoteSpecs(bar: Bar): NoteSpec[] {
@@ -46,6 +50,8 @@ export function barToNoteSpecs(bar: Bar): NoteSpec[] {
     sticking: s.hand,
     grace: s.grace,
     group: s.group,
+    block: s.block ?? -1,
+    blockLabel: s.block_label ?? '',
   }))
 }
 

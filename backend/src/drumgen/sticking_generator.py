@@ -84,8 +84,10 @@ _FAMILY_FLAGS: tuple[Family, ...] = ("singles", "odd", "paradiddle")
 _FAMILY_WEIGHT: dict[Family, float] = {"singles": 1.0, "odd": 2.6, "paradiddle": 2.6}
 
 # Short label drawn on the bracket over each placed block, parallel to VOCAB.
+# Singles get an empty label so they aren't bracketed — the brackets highlight the
+# rudiments (odd groupings, paradiddles), not plain single strokes.
 _BLOCK_LABEL: dict[Family, tuple[str, ...]] = {
-    "singles": ("Singles", "Singles", "Singles", "Singles"),
+    "singles": ("", "", "", ""),
     "odd": ("3", "5", "7"),
     "paradiddle": ("Para", "Dbl para", "Para-diddle"),
 }

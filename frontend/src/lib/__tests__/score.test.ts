@@ -42,7 +42,16 @@ describe('barToNoteSpecs', () => {
       ],
     }
     expect(barToNoteSpecs(bar)).toEqual([
-      { duration: 'q', accent: true, ghost: false, sticking: 'R', grace: 0, group: 0 },
+      {
+        duration: 'q',
+        accent: true,
+        ghost: false,
+        sticking: 'R',
+        grace: 0,
+        group: 0,
+        block: -1,
+        blockLabel: '',
+      },
     ])
   })
 })
@@ -55,6 +64,8 @@ describe('beamGroups', () => {
     sticking: 'R',
     grace: 0,
     group,
+    block: -1,
+    blockLabel: '',
   })
 
   it('beams consecutive beamable notes sharing a group', () => {

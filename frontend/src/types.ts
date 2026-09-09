@@ -19,6 +19,10 @@ export interface Stroke {
   grace: number
   /** Index of the rudiment instance this stroke belongs to; notes are beamed by group. */
   group: number
+  /** Vocabulary-block instance (Patterns 2.0), for a labelled bracket. -1 = none. */
+  block?: number
+  /** Short label for the block bracket, e.g. 'Para', '5'. */
+  block_label?: string
 }
 
 export interface Bar {
