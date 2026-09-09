@@ -102,12 +102,60 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
   tempo: tempo.value,
 }))
 
+// --- Note editor (Snare mode): click a note to toggle accent/ghost or flip hand.
+const editor = ref<{ index: number; x: number; y: number } | null>(null)
+
+function noteAt(idx: number): { bar: number; i: number } | null {
+  const bars = phrase.value?.bars ?? []
+  let n = idx
+  for (let b = 0; b < bars.length; b++) {
+    if (n < bars[b].strokes.length) return { bar: b, i: n }
+    n -= bars[b].strokes.length
+  }
+  return null
+}
+
+const editorNote = computed(() => {
+  if (editor.value === null) return null
+  const loc = noteAt(editor.value.index)
+  const s = loc ? phrase.value?.bars[loc.bar]?.strokes[loc.i] : undefined
+  return s ? { accent: s.accent, ghost: s.ghost } : null
+})
+
+function onNoteClick(p: { index: number; x: number; y: number }): void {
+  editor.value = p
+}
+
+function setNote(action: 'accent' | 'ghost' | 'flip'): void {
+  const p = phrase.value
+  if (p === null || editor.value === null) return
+  const loc = noteAt(editor.value.index)
+  if (loc === null) return
+  phrase.value = {
+    ...p,
+    bars: p.bars.map((b, bi) =>
+      bi !== loc.bar
+        ? b
+        : {
+            ...b,
+            strokes: b.strokes.map((s, si) => {
+              if (si !== loc.i) return s
+              if (action === 'accent') return { ...s, accent: true, ghost: false }
+              if (action === 'ghost') return { ...s, ghost: true, accent: false }
+              return { ...s, hand: s.hand === 'R' ? 'L' : 'R' }
+            }),
+          },
+    ),
+  }
+}
+
 async function generate(): Promise<void> {
   // Regenerating stops any playing pattern (same as the Studio tab), so the old
   // pattern doesn't keep sounding under the new one.
   transport.value?.stop()
   activeStep.value = null
   mirrored.value = false // a fresh pattern starts on its natural sticking
+  editor.value = null
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
     error.value = 'Enable at least one block family.'
@@ -157,6 +205,8 @@ function onGlobalKey(e: KeyboardEvent): void {
   } else if (e.code === 'Enter') {
     e.preventDefault()
     void generate()
+  } else if (e.code === 'Escape' && editor.value !== null) {
+    editor.value = null
   }
 }
 
@@ -187,7 +237,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
             next="/patterns2"
           />
           <GrooveScore v-if="viewGroove" :groove="viewGroove" :active-step="activeStep" label-hihat />
-          <ScoreView v-else-if="viewPhrase" :phrase="viewPhrase" :active-step="activeStep" />
+          <ScoreView
+            v-else-if="viewPhrase"
+            :phrase="viewPhrase"
+            :active-step="activeStep"
+            editable
+            @note-click="onNoteClick"
+          />
           <div v-else class="screen__empty">
             <p class="screen__empty-text">
               Toggle families and hit Generate for a sticking pattern.
@@ -322,6 +378,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       </form>
     </div>
   </main>
+
+  <Teleport to="body">
+    <div v-if="editor" class="noteedit__backdrop" @click="editor = null" />
+    <div
+      v-if="editor"
+      class="noteedit"
+      :style="{ left: editor.x + 'px', top: editor.y + 'px' }"
+      role="menu"
+    >
+      <button
+        type="button"
+        :class="{ on: editorNote?.accent }"
+        @click="setNote('accent')"
+      >
+        Accent
+      </button>
+      <button type="button" :class="{ on: editorNote?.ghost }" @click="setNote('ghost')">
+        Ghost
+      </button>
+      <button type="button" @click="setNote('flip')">Flip R/L</button>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -523,5 +601,52 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
     margin-left: 0;
     width: 100%;
   }
+}
+
+/* Note editor popover — click a note to toggle accent/ghost or flip the hand.
+   Teleported to <body>; the scoped id rides along so these styles apply. */
+.noteedit__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+}
+
+.noteedit {
+  position: fixed;
+  z-index: 71;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  box-shadow: var(--shadow-2), 0 0 24px -8px var(--amber-glow);
+}
+
+.noteedit button {
+  padding: 7px 11px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+
+.noteedit button:hover {
+  color: var(--text);
+  background: #100e0c;
+}
+
+.noteedit button.on {
+  color: var(--amber-bright);
+  box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.3);
 }
 </style>

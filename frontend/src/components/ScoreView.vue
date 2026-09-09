@@ -16,7 +16,16 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { barToNoteSpecs, beamGroups, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase | null; activeStep?: number | null }>()
+const props = defineProps<{
+  phrase: Phrase | null
+  activeStep?: number | null
+  /** Make notes clickable (Patterns 2.0 editor); emits `note-click` with the
+   * global stroke index and the note's screen position. */
+  editable?: boolean
+}>()
+const emit = defineEmits<{
+  (e: 'note-click', payload: { index: number; x: number; y: number }): void
+}>()
 const container = ref<HTMLDivElement | null>(null)
 
 // SVG <g> element for each note, in global order, for playback highlighting.
@@ -181,6 +190,13 @@ function render(phrase: Phrase): void {
     if (el === undefined) return
     el.classList.add('note-enter')
     el.style.animationDelay = `${Math.min(i * 7, 190)}ms`
+    if (props.editable) {
+      el.style.cursor = 'pointer'
+      el.addEventListener('click', () => {
+        const r = (el as unknown as SVGGraphicsElement).getBoundingClientRect()
+        emit('note-click', { index: i, x: r.left + r.width / 2, y: r.top })
+      })
+    }
   })
 }
 
