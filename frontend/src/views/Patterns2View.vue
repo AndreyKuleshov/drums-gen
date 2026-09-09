@@ -40,6 +40,34 @@ const phrase = ref<Phrase | null>(null)
 const groove = ref<Groove | null>(null)
 const activeStep = ref<number | null>(null)
 const error = ref('')
+// "Alternate sticking": mirror the whole pattern's hands R<->L — same rhythm and
+// orchestration, opposite lead hand — as a view transform over the current
+// pattern (rendered and played mirrored).
+const mirrored = ref(false)
+
+const flip = (h: 'L' | 'R'): 'L' | 'R' => (h === 'R' ? 'L' : 'R')
+const viewPhrase = computed<Phrase | null>(() => {
+  const p = phrase.value
+  if (p === null || !mirrored.value) return p
+  return {
+    ...p,
+    bars: p.bars.map((b) => ({
+      ...b,
+      strokes: b.strokes.map((s) => ({ ...s, hand: flip(s.hand) })),
+    })),
+  }
+})
+const viewGroove = computed<Groove | null>(() => {
+  const g = groove.value
+  if (g === null || !mirrored.value) return g
+  return {
+    ...g,
+    bars: g.bars.map((b) => ({
+      ...b,
+      hands: b.hands.map((h) => ({ ...h, hand: h.hand ? flip(h.hand) : h.hand })),
+    })),
+  }
+})
 
 const transport = ref<InstanceType<typeof TransportRack> | null>(null)
 const canPlay = computed(() => phrase.value !== null || groove.value !== null)
@@ -47,13 +75,13 @@ const meter = { num: 4, den: 4 }
 
 const phraseEngine: PlayEngine = {
   play: async (o) => {
-    if (phrase.value !== null) await playPhrase(phrase.value, o)
+    if (viewPhrase.value !== null) await playPhrase(viewPhrase.value, o)
   },
   stop: stopPhrase,
 }
 const grooveEngine: PlayEngine = {
   play: async (o) => {
-    if (groove.value !== null) await playGroove(groove.value, o)
+    if (viewGroove.value !== null) await playGroove(viewGroove.value, o)
   },
   stop: stopGroove,
 }
@@ -64,6 +92,7 @@ async function generate(): Promise<void> {
   // pattern doesn't keep sounding under the new one.
   transport.value?.stop()
   activeStep.value = null
+  mirrored.value = false // a fresh pattern starts on its natural sticking
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
     error.value = 'Enable at least one block family.'
@@ -135,8 +164,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <GrooveScore v-if="groove" :groove="groove" :active-step="activeStep" label-hihat />
-          <ScoreView v-else-if="phrase" :phrase="phrase" :active-step="activeStep" />
+          <GrooveScore v-if="viewGroove" :groove="viewGroove" :active-step="activeStep" label-hihat />
+          <ScoreView v-else-if="viewPhrase" :phrase="viewPhrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
             <p class="screen__empty-text">
               Toggle families and hit Generate for a sticking pattern.
@@ -236,6 +265,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               <span class="inline__sep">bpm</span>
             </div>
           </div>
+
+          <button
+            type="button"
+            class="altstick"
+            :class="{ 'is-active': mirrored }"
+            :disabled="!canPlay"
+            :aria-pressed="mirrored"
+            data-tip="Mirror the whole sticking R↔L"
+            @click="mirrored = !mirrored"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path
+                d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Alt sticking
+          </button>
 
           <button
             class="btn-primary controls__go"
@@ -356,6 +407,39 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 .controls__go {
   margin-left: auto;
   min-width: 160px;
+}
+
+/* "Alternate sticking" toggle — mirrors the current pattern's hands R<->L. */
+.altstick {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.altstick:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.altstick.is-active {
+  color: var(--amber-bright);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+}
+
+.altstick:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .screen {
