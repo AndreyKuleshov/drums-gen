@@ -301,25 +301,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
             :meta="likeMeta"
             next="/patterns2"
           />
-          <GrooveScore
-            v-if="viewGroove"
-            :groove="viewGroove"
-            :active-step="activeStep"
-            label-hihat
-            editable
-            @note-click="onGrooveNoteClick"
-          />
-          <ScoreView
-            v-else-if="viewPhrase"
-            :phrase="viewPhrase"
-            :active-step="activeStep"
-            editable
-            @note-click="onNoteClick"
-          />
-          <div v-else class="screen__empty">
-            <p class="screen__empty-text">
-              Toggle families and hit Generate for a sticking pattern.
-            </p>
+          <!-- The notation is inset from the right while SAVE is shown, so the
+               first row's top-right (sticking + accents) never slides under the
+               floating button. -->
+          <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
+            <GrooveScore
+              v-if="viewGroove"
+              :groove="viewGroove"
+              :active-step="activeStep"
+              label-hihat
+              editable
+              @note-click="onGrooveNoteClick"
+            />
+            <ScoreView
+              v-else-if="viewPhrase"
+              :phrase="viewPhrase"
+              :active-step="activeStep"
+              editable
+              @note-click="onNoteClick"
+            />
+            <div v-else class="screen__empty">
+              <p class="screen__empty-text">
+                Toggle families and hit Generate for a sticking pattern.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -639,6 +644,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   border: 1px solid var(--screen-edge);
   display: flex;
   align-items: center;
+}
+
+/* Holds the notation and fills the glass; margin (not padding) keeps the
+   measured width smaller so the score renders narrower than the glass. */
+.screen__stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Reserve the top-right corner for the floating SAVE pill (80px + gap). */
+.screen__stage--inset {
+  margin-right: 100px;
 }
 
 .screen__like {
