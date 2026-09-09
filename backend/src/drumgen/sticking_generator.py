@@ -78,6 +78,21 @@ def rules_hold(stream: Sequence[Note]) -> bool:
 
 _FAMILY_FLAGS: tuple[Family, ...] = ("singles", "odd", "paradiddle")
 
+# Selection weight per family for the packer's weighted shuffle. Singles are
+# down-weighted so the generator doesn't lean on single strokes; odd groupings and
+# paradiddles are favoured.
+_FAMILY_WEIGHT: dict[Family, float] = {"singles": 1.0, "odd": 2.6, "paradiddle": 2.6}
+
+# Short label drawn on the bracket over each placed block, parallel to VOCAB.
+_BLOCK_LABEL: dict[Family, tuple[str, ...]] = {
+    "singles": ("Singles", "Singles", "Singles", "Singles"),
+    "odd": ("3", "5", "7"),
+    "paradiddle": ("Para", "Dbl para", "Para-diddle"),
+}
+
+# A packer candidate: the block, its selection weight, and its bracket label.
+Candidate = tuple[Block, float, str]
+
 # Hard ceiling on notes per phrase. Turns pathological meters/subdivisions into a
 # controlled GenerationError instead of unbounded work. Note: this bounds total
 # work, NOT recursion depth directly — _pack recurses once per placed block, so
@@ -107,41 +122,48 @@ class StickingRequest(BaseModel):
     seed: int | None = None
 
 
-def _candidates(req: StickingRequest) -> list[Block]:
-    """Enabled families' blocks in both orientations (as-is + mirror)."""
+def _candidates(req: StickingRequest) -> list[Candidate]:
+    """Enabled families' blocks in both orientations (as-is + mirror), each tagged
+    with a selection weight and a bracket label."""
     flags = {"singles": req.singles, "odd": req.odd, "paradiddle": req.paradiddle}
     enabled: list[Family] = [fam for fam in _FAMILY_FLAGS if flags[fam]]
-    blocks: list[Block] = []
+    out: list[Candidate] = []
     for fam in enabled:
-        for block in VOCAB[fam]:
-            blocks.append(block)
-            blocks.append(mirror(block))
-    return blocks
+        weight = _FAMILY_WEIGHT[fam]
+        for i, block in enumerate(VOCAB[fam]):
+            label = _BLOCK_LABEL[fam][i]
+            out.append((block, weight, label))
+            out.append((mirror(block), weight, label))
+    return out
 
 
-def _pack(total: int, candidates: list[Block], rng: random.Random) -> list[Note]:
-    """Backtracking search for a legal note stream of exactly `total` notes."""
+def _pack(total: int, candidates: list[Candidate], rng: random.Random) -> list[tuple[Block, str]]:
+    """Backtracking search for a legal stream of exactly `total` notes, returned as
+    the sequence of placed (block, label). Each step orders candidates by a
+    weighted shuffle (Efraimidis-Spirakis: key = u**(1/weight)), so higher-weight
+    families are tried first — biasing away from single strokes."""
+    stream: list[Note] = []
+    placed: list[tuple[Block, str]] = []
 
-    def build(stream: list[Note]) -> list[Note] | None:
+    def build() -> bool:
         if len(stream) == total:
-            return stream
-        order = candidates[:]
-        rng.shuffle(order)
-        for block in order:
+            return True
+        order = sorted(candidates, key=lambda c: rng.random() ** (1.0 / c[1]), reverse=True)
+        for block, _weight, label in order:
             if len(stream) + len(block) > total:
                 continue
-            nxt = stream + list(block)
-            if not rules_hold(nxt):
-                continue
-            result = build(nxt)
-            if result is not None:
-                return result
-        return None
+            stream.extend(block)
+            if rules_hold(stream):
+                placed.append((block, label))
+                if build():
+                    return True
+                placed.pop()
+            del stream[len(stream) - len(block) :]
+        return False
 
-    packed = build([])
-    if packed is None:
+    if not build():
         raise GenerationError("Could not fill the phrase with the selected families.")
-    return packed
+    return placed
 
 
 # Accents "ride" across the kit: the lead surface advances each beat, so the
@@ -219,13 +241,18 @@ def generate_sticking(req: StickingRequest) -> Phrase | Groove:
     rng = random.Random(req.seed)
     slots = _rhythm_slots(req, rng)
     total = sum(len(bar) for bar in slots)
-    stream = _pack(total, candidates, rng)
+    placed = _pack(total, candidates, rng)
+    stream: list[Note] = [note for block, _label in placed for note in block]
+    # Per-note (block-instance-id, label) for the bracket over each placed block.
+    note_meta: list[tuple[int, str]] = []
+    for block_id, (block, label) in enumerate(placed):
+        note_meta.extend((block_id, label) for _ in block)
 
     if req.voicing == "linear":
         return _orchestrate_linear(stream, slots, req, rng)
     if req.voicing == "kit":
         return _orchestrate_kit(stream, slots, req, rng)
-    return _snare_phrase(stream, slots, req)
+    return _snare_phrase(stream, slots, note_meta, req)
 
 
 def _out_subdivision(req: StickingRequest) -> Fraction:
@@ -233,10 +260,13 @@ def _out_subdivision(req: StickingRequest) -> Fraction:
     return _SIXTEENTH if req.mixed else req.subdivision
 
 
-def _snare_phrase(stream: list[Note], slots: Slots, req: StickingRequest) -> Phrase:
+def _snare_phrase(
+    stream: list[Note], slots: Slots, note_meta: list[tuple[int, str]], req: StickingRequest
+) -> Phrase:
     """Pure sticking: every stroke on the snare, monophonic Phrase. Notes are
     grouped (beamed) per beat via `Stroke.group` so a bar of sixteenths reads as
-    groups of four, not one long beam."""
+    groups of four; `block`/`block_label` tag each stroke's vocabulary block for
+    the labelled bracket over the group."""
     beat_len = req.time_sig.beat_length
     bars: list[Bar] = []
     idx = 0
@@ -244,6 +274,7 @@ def _snare_phrase(stream: list[Note], slots: Slots, req: StickingRequest) -> Phr
         strokes: list[Stroke] = []
         for onset, dur in bar_slots:
             hand, accent = stream[idx]
+            block_id, label = note_meta[idx]
             idx += 1
             strokes.append(
                 Stroke(
@@ -252,6 +283,8 @@ def _snare_phrase(stream: list[Note], slots: Slots, req: StickingRequest) -> Phr
                     accent=accent,
                     ghost=not accent,
                     group=int(onset / beat_len),
+                    block=block_id,
+                    block_label=label,
                 )
             )
         bars.append(Bar(time_sig=req.time_sig, strokes=strokes))
