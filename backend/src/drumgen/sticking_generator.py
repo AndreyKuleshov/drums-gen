@@ -234,15 +234,26 @@ def _out_subdivision(req: StickingRequest) -> Fraction:
 
 
 def _snare_phrase(stream: list[Note], slots: Slots, req: StickingRequest) -> Phrase:
-    """Pure sticking: every stroke on the snare, monophonic Phrase."""
+    """Pure sticking: every stroke on the snare, monophonic Phrase. Notes are
+    grouped (beamed) per beat via `Stroke.group` so a bar of sixteenths reads as
+    groups of four, not one long beam."""
+    beat_len = req.time_sig.beat_length
     bars: list[Bar] = []
     idx = 0
     for bar_slots in slots:
         strokes: list[Stroke] = []
-        for _onset, dur in bar_slots:
+        for onset, dur in bar_slots:
             hand, accent = stream[idx]
             idx += 1
-            strokes.append(Stroke(duration=dur, hand=Hand(hand), accent=accent, ghost=not accent))
+            strokes.append(
+                Stroke(
+                    duration=dur,
+                    hand=Hand(hand),
+                    accent=accent,
+                    ghost=not accent,
+                    group=int(onset / beat_len),
+                )
+            )
         bars.append(Bar(time_sig=req.time_sig, strokes=strokes))
 
     return Phrase(
