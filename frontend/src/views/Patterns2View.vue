@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import GrooveScore from '../components/GrooveScore.vue'
+import LikeButton from '../components/LikeButton.vue'
 import ScoreView from '../components/ScoreView.vue'
 import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
@@ -87,6 +88,20 @@ const grooveEngine: PlayEngine = {
 }
 const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine : phraseEngine))
 
+// Favorites: save the pattern currently on screen (mirrored or not). A Groove is
+// stored as kind 'pattern' (rendered by GrooveScore in My Account), a Phrase as
+// 'exercise' (ScoreView) — matching the Studio's like flow.
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+const likePayload = computed(() => viewGroove.value ?? viewPhrase.value)
+const likeMeta = computed<Record<string, unknown>>(() => ({
+  kind: groove.value !== null ? 'pattern' : 'exercise',
+  level: cap(voicing.value),
+  meter: '4/4',
+  feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
+  bars: bars.value,
+  tempo: tempo.value,
+}))
+
 async function generate(): Promise<void> {
   // Regenerating stops any playing pattern (same as the Studio tab), so the old
   // pattern doesn't keep sounding under the new one.
@@ -164,6 +179,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
+          <LikeButton
+            v-if="likePayload"
+            class="screen__like"
+            :payload="likePayload"
+            :meta="likeMeta"
+            next="/patterns2"
+          />
           <GrooveScore v-if="viewGroove" :groove="viewGroove" :active-step="activeStep" label-hihat />
           <ScoreView v-else-if="viewPhrase" :phrase="viewPhrase" :active-step="activeStep" />
           <div v-else class="screen__empty">
@@ -449,12 +471,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   border: 1px solid var(--edge);
 }
 .screen__glass {
+  position: relative;
   min-height: 200px;
   border-radius: var(--r-md);
   background: linear-gradient(180deg, #fbf6ec, var(--screen));
   border: 1px solid var(--screen-edge);
   display: flex;
   align-items: center;
+}
+
+.screen__like {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
 }
 .screen__empty {
   width: 100%;
