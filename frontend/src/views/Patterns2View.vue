@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import AuthNav from '../components/AuthNav.vue'
 import GrooveScore from '../components/GrooveScore.vue'
 import LikeButton from '../components/LikeButton.vue'
 import ScoreView from '../components/ScoreView.vue'
@@ -288,7 +289,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           <span class="brand__name">Patterns 2.0</span>
         </div>
         <div class="brand__meta">
+          <RouterLink to="/shortcuts" class="nav-link" title="Keyboard shortcuts"
+            >⌨ Shortcuts</RouterLink
+          >
+          <RouterLink to="/rudiments" class="nav-link">Rudiments &rarr;</RouterLink>
           <RouterLink to="/" class="nav-link">&larr; Studio</RouterLink>
+          <AuthNav />
+          <span class="led led--on" aria-hidden="true" />
         </div>
       </header>
 
