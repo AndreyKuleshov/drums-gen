@@ -16,7 +16,16 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { barToNoteSpecs, beamGroups, isTripletDuration } from '../lib/score'
 import type { Phrase } from '../types'
 
-const props = defineProps<{ phrase: Phrase | null; activeStep?: number | null }>()
+const props = defineProps<{
+  phrase: Phrase | null
+  activeStep?: number | null
+  /** Make notes clickable (Patterns 2.0 editor); emits `note-click` with the
+   * global stroke index and the note's screen position. */
+  editable?: boolean
+}>()
+const emit = defineEmits<{
+  (e: 'note-click', payload: { index: number; x: number; y: number }): void
+}>()
 const container = ref<HTMLDivElement | null>(null)
 
 // SVG <g> element for each note, in global order, for playback highlighting.
@@ -24,7 +33,9 @@ let noteEls: (SVGElement | undefined)[] = []
 
 // Layout constants (px).
 const LEFT_MARGIN = 10
-const TOP = 20
+// Extra headroom above the stave leaves room for the block brackets + labels
+// (Patterns 2.0) that sit above the accent row.
+const TOP = 46
 const ROW_HEIGHT = 150
 const PX_PER_NOTE = 30
 const CLEF_TIME_WIDTH = 60
@@ -172,6 +183,41 @@ function render(phrase: Phrase): void {
       }
     }
 
+    // Block brackets (Patterns 2.0): a square bracket + label over each run of
+    // notes from one vocabulary block. Labels come from the backend; singles are
+    // unlabelled, so they get no bracket.
+    const blockGroups: { i0: number; i1: number; label: string }[] = []
+    let g = 0
+    while (g < specs.length) {
+      const b = specs[g].block
+      if (b < 0) {
+        g += 1
+        continue
+      }
+      let j = g
+      while (j + 1 < specs.length && specs[j + 1].block === b) j += 1
+      if (specs[g].blockLabel) blockGroups.push({ i0: g, i1: j, label: specs[g].blockLabel })
+      g = j + 1
+    }
+    if (blockGroups.length > 0) {
+      const stemTop = Math.min(...notes.map((n) => n.getStemExtents().topY))
+      const bracketY = stemTop - 28
+      context.setLineWidth(1)
+      for (const grp of blockGroups) {
+        const x0 = notes[grp.i0].getAbsoluteX() - 6
+        const x1 = notes[grp.i1].getAbsoluteX() + 6
+        context.beginPath()
+        context.moveTo(x0, bracketY + 5)
+        context.lineTo(x0, bracketY)
+        context.lineTo(x1, bracketY)
+        context.lineTo(x1, bracketY + 5)
+        context.stroke()
+        context.setFont('Georgia, serif', 10, 'normal')
+        const w = context.measureText(grp.label).width
+        context.fillText(grp.label, (x0 + x1) / 2 - w / 2, bracketY - 3)
+      }
+    }
+
     for (const note of notes) noteEls.push(note.getSVGElement())
   }
 
@@ -181,6 +227,13 @@ function render(phrase: Phrase): void {
     if (el === undefined) return
     el.classList.add('note-enter')
     el.style.animationDelay = `${Math.min(i * 7, 190)}ms`
+    if (props.editable) {
+      el.style.cursor = 'pointer'
+      el.addEventListener('click', () => {
+        const r = (el as unknown as SVGGraphicsElement).getBoundingClientRect()
+        emit('note-click', { index: i, x: r.left + r.width / 2, y: r.top })
+      })
+    }
   })
 }
 

@@ -43,6 +43,11 @@ class Stroke(BaseModel):
     Strokes sharing a group came from one placed rudiment template; the frontend
     beams notes together by group. Defaults to 0 for standalone strokes.
     """
+    block: int = -1
+    """Vocabulary-block instance this stroke came from (Patterns 2.0), for drawing
+    a labelled bracket over the group. -1 = not part of a tagged block."""
+    block_label: str = ""
+    """Short label for the block bracket, e.g. 'Para', '5', 'Singles'."""
 
 
 class Bar(BaseModel):
