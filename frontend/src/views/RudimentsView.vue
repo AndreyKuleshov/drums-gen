@@ -7,6 +7,12 @@ import RudimentStaff from '../components/RudimentStaff.vue'
 import { apiUrl } from '../lib/api'
 import type { Rudiment } from '../types'
 
+// Remember where we came from (Studio or Patterns 2.0): Vue Router records the
+// referring route's path in history state. Fall back to the studio for a fresh
+// deep-link.
+const prev = (window.history.state as { back?: unknown } | null)?.back
+const backTo = typeof prev === 'string' && prev.startsWith('/') ? prev : '/'
+
 const rudiments = ref<Rudiment[]>([])
 const error = ref('')
 const loading = ref(true)
@@ -44,7 +50,7 @@ onMounted(async () => {
         </div>
         <div class="brand__meta">
           <span class="brand__model">RG&#8209;40 · RUDIMENT ENGINE</span>
-          <RouterLink to="/" class="nav-link">&larr; Generator</RouterLink>
+          <RouterLink :to="backTo" class="nav-link">&larr; Back</RouterLink>
           <AuthNav />
           <span class="led led--on" aria-hidden="true" />
         </div>

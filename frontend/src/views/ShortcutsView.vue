@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 
+// Remember where we came from: Vue Router records the referring route's path in
+// history state on navigation. Fall back to the studio for a fresh deep-link
+// (no in-app history to go back to).
+const prev = (window.history.state as { back?: unknown } | null)?.back
+const backTo = typeof prev === 'string' && prev.startsWith('/') ? prev : '/'
+
 const shortcuts = [
   { keys: ['Space'], action: 'Play / Stop', hint: 'Toggles playback of the current pattern' },
   { keys: ['R'], action: 'Loop', hint: 'Turns looping on or off' },
@@ -18,7 +24,7 @@ const shortcuts = [
           <span class="brand__name">Keyboard Shortcuts</span>
         </div>
         <div class="brand__meta">
-          <RouterLink to="/" class="nav-link">&larr; Back</RouterLink>
+          <RouterLink :to="backTo" class="nav-link">&larr; Back</RouterLink>
         </div>
       </header>
 
