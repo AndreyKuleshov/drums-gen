@@ -9,10 +9,10 @@ import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
 import { ApiError, apiFetch } from '../lib/api'
-import { playPhrase, stopPhrase } from '../lib/audio'
+import { parseFraction, playPhrase, stopPhrase } from '../lib/audio'
 import { playGroove, stopGroove } from '../lib/kit'
 import { persistedRef } from '../lib/storage'
-import type { Groove, Phrase } from '../types'
+import type { Groove, Hit, Phrase } from '../types'
 
 const tempo = persistedRef('patterns2-tempo', 100)
 const bars = persistedRef('patterns2-bars', 2)
@@ -102,8 +102,16 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
   tempo: tempo.value,
 }))
 
-// --- Note editor (Snare mode): click a note to toggle accent/ghost or flip hand.
-const editor = ref<{ index: number; x: number; y: number } | null>(null)
+// --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
+// on the snare Phrase (one stroke at a time) and on kit/linear Grooves (every
+// hit sounding on the clicked onset cell). Accent/ghost toggle; ghost only
+// applies to the melodic voices (snare + toms).
+const CELL = 1 / 32 // notation grid used by GrooveScore to key hits by onset
+const MELODIC = new Set(['snare', 'tom_high', 'tom_mid', 'tom_low'])
+type EditTarget =
+  | { kind: 'phrase'; index: number }
+  | { kind: 'groove'; bar: number; cell: number }
+const editor = ref<{ target: EditTarget; x: number; y: number } | null>(null)
 
 function noteAt(idx: number): { bar: number; i: number } | null {
   const bars = phrase.value?.bars ?? []
@@ -115,21 +123,41 @@ function noteAt(idx: number): { bar: number; i: number } | null {
   return null
 }
 
+const cellOf = (h: Hit): number => Math.round(parseFraction(h.onset) / CELL)
+function hitsAtCell(bar: number, cell: number): Hit[] {
+  const b = groove.value?.bars[bar]
+  return b ? b.hands.filter((h) => cellOf(h) === cell) : []
+}
+
 const editorNote = computed(() => {
-  if (editor.value === null) return null
-  const loc = noteAt(editor.value.index)
-  const s = loc ? phrase.value?.bars[loc.bar]?.strokes[loc.i] : undefined
-  return s ? { accent: s.accent, ghost: s.ghost } : null
+  const e = editor.value
+  if (e === null) return null
+  if (e.target.kind === 'phrase') {
+    const loc = noteAt(e.target.index)
+    const s = loc ? phrase.value?.bars[loc.bar]?.strokes[loc.i] : undefined
+    return s ? { accent: s.accent, ghost: s.ghost, canGhost: true, canFlip: true } : null
+  }
+  const hits = hitsAtCell(e.target.bar, e.target.cell)
+  if (hits.length === 0) return null
+  return {
+    accent: hits.some((h) => h.accent),
+    ghost: hits.some((h) => h.ghost),
+    canGhost: hits.some((h) => MELODIC.has(h.surface)),
+    canFlip: hits.some((h) => h.hand !== null),
+  }
 })
 
 function onNoteClick(p: { index: number; x: number; y: number }): void {
-  editor.value = p
+  editor.value = { target: { kind: 'phrase', index: p.index }, x: p.x, y: p.y }
+}
+function onGrooveNoteClick(p: { bar: number; cell: number; x: number; y: number }): void {
+  editor.value = { target: { kind: 'groove', bar: p.bar, cell: p.cell }, x: p.x, y: p.y }
 }
 
-function setNote(action: 'accent' | 'ghost' | 'flip'): void {
+function setPhraseNote(index: number, action: 'accent' | 'ghost' | 'flip'): void {
   const p = phrase.value
-  if (p === null || editor.value === null) return
-  const loc = noteAt(editor.value.index)
+  if (p === null) return
+  const loc = noteAt(index)
   if (loc === null) return
   phrase.value = {
     ...p,
@@ -140,13 +168,50 @@ function setNote(action: 'accent' | 'ghost' | 'flip'): void {
             ...b,
             strokes: b.strokes.map((s, si) => {
               if (si !== loc.i) return s
-              if (action === 'accent') return { ...s, accent: true, ghost: false }
-              if (action === 'ghost') return { ...s, ghost: true, accent: false }
-              return { ...s, hand: s.hand === 'R' ? 'L' : 'R' }
+              if (action === 'flip') return { ...s, hand: s.hand === 'R' ? 'L' : 'R' }
+              if (action === 'accent') return { ...s, accent: !s.accent, ghost: false }
+              return { ...s, ghost: !s.ghost, accent: false }
             }),
           },
     ),
   }
+}
+
+function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | 'flip'): void {
+  const g = groove.value
+  if (g === null) return
+  const hits = hitsAtCell(bar, cell)
+  if (hits.length === 0) return
+  const nextAccent = !hits.some((h) => h.accent)
+  const nextGhost = !hits.some((h) => h.ghost)
+  groove.value = {
+    ...g,
+    bars: g.bars.map((b, bi) =>
+      bi !== bar
+        ? b
+        : {
+            ...b,
+            hands: b.hands.map((h) => {
+              if (cellOf(h) !== cell) return h
+              if (action === 'flip') {
+                return h.hand ? { ...h, hand: h.hand === 'R' ? 'L' : 'R' } : h
+              }
+              if (action === 'accent') {
+                return { ...h, accent: nextAccent, ghost: nextAccent ? false : h.ghost }
+              }
+              if (!MELODIC.has(h.surface)) return h
+              return { ...h, ghost: nextGhost, accent: nextGhost ? false : h.accent }
+            }),
+          },
+    ),
+  }
+}
+
+function setNote(action: 'accent' | 'ghost' | 'flip'): void {
+  const e = editor.value
+  if (e === null) return
+  if (e.target.kind === 'phrase') setPhraseNote(e.target.index, action)
+  else setGrooveNote(e.target.bar, e.target.cell, action)
 }
 
 async function generate(): Promise<void> {
@@ -236,7 +301,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
             :meta="likeMeta"
             next="/patterns2"
           />
-          <GrooveScore v-if="viewGroove" :groove="viewGroove" :active-step="activeStep" label-hihat />
+          <GrooveScore
+            v-if="viewGroove"
+            :groove="viewGroove"
+            :active-step="activeStep"
+            label-hihat
+            editable
+            @note-click="onGrooveNoteClick"
+          />
           <ScoreView
             v-else-if="viewPhrase"
             :phrase="viewPhrase"
@@ -394,10 +466,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       >
         Accent
       </button>
-      <button type="button" :class="{ on: editorNote?.ghost }" @click="setNote('ghost')">
+      <button
+        type="button"
+        :class="{ on: editorNote?.ghost }"
+        :disabled="editorNote !== null && !editorNote.canGhost"
+        @click="setNote('ghost')"
+      >
         Ghost
       </button>
-      <button type="button" @click="setNote('flip')">Flip R/L</button>
+      <button
+        type="button"
+        :disabled="editorNote !== null && !editorNote.canFlip"
+        @click="setNote('flip')"
+      >
+        Flip R/L
+      </button>
     </div>
   </Teleport>
 </template>
@@ -648,5 +731,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 .noteedit button.on {
   color: var(--amber-bright);
   box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+}
+
+.noteedit button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.noteedit button:disabled:hover {
+  color: var(--text-dim);
+  background: transparent;
 }
 </style>

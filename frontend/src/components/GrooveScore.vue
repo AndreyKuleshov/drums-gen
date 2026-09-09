@@ -27,6 +27,13 @@ const props = defineProps<{
    * carries real sticking). Off by default so a groove's hat ostinato stays
    * unlabelled. */
   labelHihat?: boolean
+  /** Make the melodic (hands) notes clickable (Patterns 2.0 editor); emits
+   * `note-click` with the bar index, the onset cell, and the note's screen
+   * position so the parent can edit the hits at that cell. */
+  editable?: boolean
+}>()
+const emit = defineEmits<{
+  (e: 'note-click', payload: { bar: number; cell: number; x: number; y: number }): void
 }>()
 const container = ref<HTMLDivElement | null>(null)
 
@@ -381,6 +388,22 @@ function render(): void {
       const idx = stepIndex.get(Math.round((barStart + it.cell * CELL) / CELL))
       const el = it.note.getSVGElement()
       if (idx !== undefined && el) stepEls[idx].push(el)
+    }
+
+    // Editor (Patterns 2.0): clicking a melodic (hands) note opens the note
+    // editor for every hit sounding on that onset cell.
+    if (props.editable) {
+      for (const it of b.hands) {
+        if (it.cell === null) continue
+        const el = it.note.getSVGElement() as unknown as SVGGraphicsElement | undefined
+        if (el === undefined) continue
+        el.style.cursor = 'pointer'
+        const cell = it.cell
+        el.addEventListener('click', () => {
+          const r = el.getBoundingClientRect()
+          emit('note-click', { bar: i, cell, x: r.left + r.width / 2, y: r.top })
+        })
+      }
     }
 
     elapsedWhole += bar.time_sig.num / bar.time_sig.den
