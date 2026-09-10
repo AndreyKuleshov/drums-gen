@@ -250,11 +250,12 @@ def generate_sticking(req: StickingRequest) -> Phrase | Groove:
     for block_id, (block, label) in enumerate(placed):
         note_meta.extend((block_id, label) for _ in block)
 
+    ghosts = _ghost_flags(stream)
     if req.voicing == "linear":
-        return _orchestrate_linear(stream, slots, req, rng)
+        return _orchestrate_linear(stream, slots, req, rng, ghosts)
     if req.voicing == "kit":
-        return _orchestrate_kit(stream, slots, req, rng, note_meta)
-    return _snare_phrase(stream, slots, note_meta, req)
+        return _orchestrate_kit(stream, slots, req, rng, note_meta, ghosts)
+    return _snare_phrase(stream, slots, note_meta, ghosts, req)
 
 
 def _out_subdivision(req: StickingRequest) -> Fraction:
@@ -262,13 +263,29 @@ def _out_subdivision(req: StickingRequest) -> Fraction:
     return _SIXTEENTH if req.mixed else req.subdivision
 
 
+def _ghost_flags(stream: list[Note]) -> list[bool]:
+    """Which strokes are ghost notes. A non-accented stroke is a ghost only when
+    it repeats the previous hand — the 2nd of a diddle (double). The alternating
+    single taps stay normal, so a pattern reads as a MIX of accents, taps and
+    ghosts instead of 'every non-accent is a ghost'."""
+    return [
+        (not accent) and i > 0 and stream[i - 1][0] == hand
+        for i, (hand, accent) in enumerate(stream)
+    ]
+
+
 def _snare_phrase(
-    stream: list[Note], slots: Slots, note_meta: list[tuple[int, str]], req: StickingRequest
+    stream: list[Note],
+    slots: Slots,
+    note_meta: list[tuple[int, str]],
+    ghosts: list[bool],
+    req: StickingRequest,
 ) -> Phrase:
     """Pure sticking: every stroke on the snare, monophonic Phrase. Notes are
     grouped (beamed) per beat via `Stroke.group` so a bar of sixteenths reads as
     groups of four; `block`/`block_label` tag each stroke's vocabulary block for
-    the labelled bracket over the group."""
+    the labelled bracket over the group. Strokes are accents, ghosts (diddles) or
+    plain taps."""
     beat_len = req.time_sig.beat_length
     bars: list[Bar] = []
     idx = 0
@@ -277,18 +294,18 @@ def _snare_phrase(
         for onset, dur in bar_slots:
             hand, accent = stream[idx]
             block_id, label = note_meta[idx]
-            idx += 1
             strokes.append(
                 Stroke(
                     duration=dur,
                     hand=Hand(hand),
                     accent=accent,
-                    ghost=not accent,
+                    ghost=ghosts[idx],
                     group=int(onset / beat_len),
                     block=block_id,
                     block_label=label,
                 )
             )
+            idx += 1
         bars.append(Bar(time_sig=req.time_sig, strokes=strokes))
 
     return Phrase(
@@ -325,12 +342,13 @@ def _kit_hand_hit(
     block: int = -1,
     block_label: str = "",
     lead_order: list[Surface] = _LEAD_ORDER,
+    is_ghost: bool = False,
 ) -> Hit:
     """One hands-voice hit for the kit orchestration: an accent rides the snare/tom
     lead, a non-accent goes to the hi-hat (right hand) or snare (left). Ghost notes
-    exist ONLY on the snare — a hi-hat note is a plain timekeeping note, never a
-    ghost. `block`/`block_label` carry the vocabulary-block tag for the labelled
-    bracket over the group."""
+    exist ONLY on the snare AND only for strokes flagged `is_ghost` (the diddles) —
+    a plain snare tap or any hi-hat note is not a ghost. `block`/`block_label` carry
+    the vocabulary-block tag for the labelled bracket over the group."""
     if accent:
         surface = _lead_surface(onset, beat_len, lead_start, bar, lead_order)
         return Hit(
@@ -348,7 +366,7 @@ def _kit_hand_hit(
         duration=dur,
         surface=surface,
         hand=hand,
-        ghost=surface is Surface.SNARE,
+        ghost=is_ghost and surface is Surface.SNARE,
         block=block,
         block_label=block_label,
     )
@@ -360,6 +378,7 @@ def _orchestrate_kit(
     req: StickingRequest,
     rng: random.Random,
     note_meta: list[tuple[int, str]],
+    ghosts: list[bool],
 ) -> Groove:
     """Accents ride snare/toms (moving a step down the kit each beat), ghosts split
     to hi-hat (right hand) and snare (left), and a simultaneous kick foundation
@@ -384,11 +403,20 @@ def _orchestrate_kit(
         for onset, dur in bar_slots:
             hand_char, accent = stream[idx]
             block_id, label = note_meta[idx]
-            idx += 1
             hit = _kit_hand_hit(
-                onset, dur, Hand(hand_char), accent, beat_len, lead_start, b, block_id, label
+                onset,
+                dur,
+                Hand(hand_char),
+                accent,
+                beat_len,
+                lead_start,
+                b,
+                block_id,
+                label,
+                is_ghost=ghosts[idx],
             )
             hands.append(hit)
+            idx += 1
 
         feet: list[Hit] = [Hit(onset=Fraction(0), duration=kick_dur, surface=Surface.KICK)]
         count = min(rng.randint(1, 3), len(eighth_grid))
@@ -407,7 +435,11 @@ def _orchestrate_kit(
 
 
 def _orchestrate_linear(
-    stream: list[Note], slots: Slots, req: StickingRequest, rng: random.Random
+    stream: list[Note],
+    slots: Slots,
+    req: StickingRequest,
+    rng: random.Random,
+    ghosts: list[bool],
 ) -> Groove:
     """A linear fill: one line across the whole kit with AT MOST ONE stroke per
     onset. Accents ride snare/toms, ghosts land on hi-hat/snare, and some ghosts
@@ -424,6 +456,7 @@ def _orchestrate_linear(
         feet: list[Hit] = []
         for onset, dur in bar_slots:
             hand_char, accent = stream[idx]
+            is_ghost = ghosts[idx]
             idx += 1
             hand = Hand(hand_char)
             if not accent and rng.random() < 0.3:
@@ -437,14 +470,14 @@ def _orchestrate_linear(
                 )
             else:
                 surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
-                # Ghost notes only exist on the snare; a hi-hat note is plain.
+                # Ghost notes only exist on the snare, and only for diddles.
                 hands.append(
                     Hit(
                         onset=onset,
                         duration=dur,
                         surface=surface,
                         hand=hand,
-                        ghost=surface is Surface.SNARE,
+                        ghost=is_ghost and surface is Surface.SNARE,
                     )
                 )
         bars.append(GrooveBar(time_sig=ts, hands=hands, feet=feet))
@@ -490,6 +523,7 @@ def revoice_kit(phrase: Phrase, seed: int | None = None) -> Groove:
                     s.block,
                     s.block_label,
                     order,
+                    s.ghost,
                 )
             )
             onset += s.duration

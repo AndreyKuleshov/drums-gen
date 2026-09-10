@@ -98,11 +98,23 @@ def test_fills_exact_note_count_per_bar():
         assert all(s.duration == Fraction(1, 16) for s in bar.strokes)
 
 
-def test_every_note_is_accent_xor_ghost():
-    phrase = _snare(num_bars=4, seed=3)
-    for bar in phrase.bars:
-        for s in bar.strokes:
-            assert s.accent != s.ghost  # exactly one is true
+def test_stroke_is_accent_tap_or_ghost_never_both():
+    # A stroke is an accent, a ghost (a diddle) or a plain tap — never accent AND
+    # ghost at once. Ghosts are only the 2nd of a same-hand double.
+    phrase = _snare(num_bars=4, seed=3, odd=True, paradiddle=True, singles=False)
+    strokes = [s for bar in phrase.bars for s in bar.strokes]
+    for s in strokes:
+        assert not (s.accent and s.ghost)
+    # With diddles present the phrase is a genuine MIX: accents, taps and ghosts.
+    assert any(s.accent for s in strokes)
+    assert any(s.ghost for s in strokes)
+    assert any(not s.accent and not s.ghost for s in strokes)  # plain taps exist
+    # Every ghost repeats the previous hand (it's the 2nd of a diddle).
+    stream = _stream(phrase)
+    for i, s in enumerate(strokes):
+        if s.ghost:
+            assert i > 0
+            assert stream[i - 1][0] == stream[i][0]
 
 
 @pytest.mark.parametrize("seed", range(30))
