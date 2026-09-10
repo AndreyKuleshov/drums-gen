@@ -201,20 +201,27 @@ function render(phrase: Phrase): void {
     }
     if (blockGroups.length > 0) {
       const stemTop = Math.min(...notes.map((n) => n.getStemExtents().topY))
-      const bracketY = stemTop - 28
-      context.setLineWidth(1)
+      const bracketY = stemTop - 30
+      // Centre the bracket over the note heads (a head is ~12px wide). Drawn with
+      // thin FILLED rects, not a stroked path: the notation's `path { fill }` CSS
+      // force-fills any stroke-only path, collapsing it into a solid wedge/bar.
+      // A continuous line with short down-hooks at each end and the label centred
+      // above — a plain grouping bracket.
+      const HEAD_HALF = 6
+      const HOOK = 6
+      const TH = 1.3
+      // Reach the right hook a little past the last note so the bracket clearly
+      // spans the whole group (the left hook already sits over the first note).
+      const RIGHT_EXT = 11
+      context.setFont('Georgia, serif', 10, 'normal')
       for (const grp of blockGroups) {
-        const x0 = notes[grp.i0].getAbsoluteX() - 6
-        const x1 = notes[grp.i1].getAbsoluteX() + 6
-        context.beginPath()
-        context.moveTo(x0, bracketY + 5)
-        context.lineTo(x0, bracketY)
-        context.lineTo(x1, bracketY)
-        context.lineTo(x1, bracketY + 5)
-        context.stroke()
-        context.setFont('Georgia, serif', 10, 'normal')
+        const x0 = notes[grp.i0].getAbsoluteX() + HEAD_HALF
+        const x1 = notes[grp.i1].getAbsoluteX() + HEAD_HALF + RIGHT_EXT
+        context.fillRect(x0, bracketY, x1 - x0, TH) // horizontal line
+        context.fillRect(x0, bracketY, TH, HOOK) // left down-hook
+        context.fillRect(x1 - TH, bracketY, TH, HOOK) // right down-hook
         const w = context.measureText(grp.label).width
-        context.fillText(grp.label, (x0 + x1) / 2 - w / 2, bracketY - 3)
+        context.fillText(grp.label, (x0 + x1) / 2 - w / 2, bracketY - 4)
       }
     }
 
