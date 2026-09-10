@@ -53,10 +53,13 @@ const CELL = 1 / 32 // notation grid (every onset lands here — supports 32nds 
 const LEFT = 10
 const TOP = 66 // headroom above the stave for the bracket, accents + R/L sticking
 const ROW_HEIGHT = 160
-const CLEF_W = 52
-// Bars are sized by the width VexFlow needs for their notes (measured per bar), so
-// notes never spill past the barline; the whole SVG then scales to fit the screen.
-const MIN_BAR_W = 112
+// Bar sizing MUST match ScoreView.vue exactly (same CLEF/MIN/PX constants and
+// count-based formula) so a bar keeps its width when the Snare<->Kit toggle
+// swaps a snare Phrase for its re-voiced Groove.
+const CLEF_W = 60
+const MIN_BAR_W = 140
+const PX_PER_NOTE = 30
+const MIN_PX_PER_NOTE = 12
 const DEFAULT_LINE_W = 1000
 
 // Cell-count -> note tokens. Power-of-two durations ONLY: VexFlow's Dot modifier
@@ -268,12 +271,13 @@ interface BarBuilt {
   handsVoice: Voice
   feetVoice: Voice | null
   beams: Beam[]
-  minW: number // the width VexFlow actually needs for the notes (no clef)
+  noteCount: number // played onsets in the bar — drives width (same as ScoreView)
 }
 
 function layoutBars(
   built: BarBuilt[],
   lineWidth: number,
+  pxPerNote: number,
 ): { rows: BarLayout[]; height: number; contentW: number } {
   const rows: BarLayout[] = []
   let x = LEFT
@@ -281,9 +285,13 @@ function layoutBars(
   let firstInRow = true
   let contentW = 0
 
+  // Same width formula as ScoreView: notes × pxPerNote, clamped between a minimum
+  // and the line width, so identical patterns get identical bar widths.
   const widthOf = (i: number, first: boolean): number => {
     const clef = first ? CLEF_W : 0
-    return Math.max(MIN_BAR_W + clef, built[i].minW + clef + INNER_PAD)
+    const natural = built[i].noteCount * pxPerNote + clef
+    const min = Math.min(MIN_BAR_W + clef, lineWidth - LEFT * 2)
+    return Math.min(Math.max(min, natural), lineWidth - LEFT * 2)
   }
 
   built.forEach((b, i) => {
@@ -317,7 +325,7 @@ function render(): void {
   // content (flex child), which would feed a stale wide width back in and overflow.
   const parentW = host.parentElement?.clientWidth ?? host.clientWidth
   const avail = parentW - 20
-  const lineWidth = avail > 60 ? avail : DEFAULT_LINE_W
+  const lineWidth = avail > 2 * MIN_BAR_W ? avail : DEFAULT_LINE_W
 
   const groups = [new VFraction(1, 4)]
   // Pass 1: build each bar's voices + beams and measure the width VexFlow really
@@ -347,14 +355,15 @@ function render(): void {
         maintain_stem_directions: true,
       }),
     ]
-    const voices = feetVoice ? [handsVoice, feetVoice] : [handsVoice]
-    const minW = Math.ceil(
-      new Formatter().joinVoices(voices).preCalculateMinTotalWidth(voices),
-    )
-    return { bar, hands, feet, handsVoice, feetVoice, beams, minW }
+    const noteCount = hands.filter((it) => it.cell !== null).length
+    return { bar, hands, feet, handsVoice, feetVoice, beams, noteCount }
   })
 
-  const { rows, height, contentW } = layoutBars(built, lineWidth)
+  // pxPerNote shrinks so the densest bar fits the width — identical to ScoreView.
+  const maxNotes = Math.max(1, ...built.map((b) => b.noteCount))
+  const usable = lineWidth - LEFT * 2 - CLEF_W
+  const pxPerNote = Math.max(MIN_PX_PER_NOTE, Math.min(PX_PER_NOTE, usable / maxNotes))
+  const { rows, height, contentW } = layoutBars(built, lineWidth, pxPerNote)
   const renderer = new Renderer(host, Renderer.Backends.SVG)
   renderer.resize(Math.max(lineWidth, contentW), height)
   const ctx = renderer.getContext()

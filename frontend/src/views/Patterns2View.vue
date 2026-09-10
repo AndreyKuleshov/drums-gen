@@ -24,11 +24,14 @@ const paradiddle = persistedRef('patterns2-paradiddle', true)
 // 'snare' = pure sticking; 'kit' = orchestrated across the kit (polyphonic);
 // 'linear' = one line across the kit, at most one stroke at a time.
 type Voicing = 'snare' | 'kit' | 'linear'
-const voicing = persistedRef<Voicing>('patterns2-voicing', 'linear')
-const voicings: { v: Voicing; label: string }[] = [
-  { v: 'linear', label: 'Linear' },
+// Only Snare is generatable for now: the kit is reached via the Snare<->Kit
+// re-voice toggle, and Linear is coming soon (disabled). Coerce any stale
+// persisted value back to Snare.
+const voicing = persistedRef<Voicing>('patterns2-voicing', 'snare')
+if (voicing.value !== 'snare') voicing.value = 'snare'
+const voicings: { v: Voicing; label: string; disabled?: boolean; tip?: string }[] = [
   { v: 'snare', label: 'Snare' },
-  { v: 'kit', label: 'Kit' },
+  { v: 'linear', label: 'Linear', disabled: true, tip: 'Coming soon' },
 ]
 // Subdivision doubles as a rhythm mode: '1/8'/'1/16' are uniform grids, 'mixed'
 // mixes both within a bar.
@@ -440,8 +443,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
                 type="button"
                 role="radio"
                 :aria-checked="voicing === o.v"
-                :class="['segment__btn', { 'is-active': voicing === o.v }]"
-                @click="voicing = o.v"
+                :aria-disabled="o.disabled ? 'true' : undefined"
+                :data-tip="o.tip"
+                :class="['segment__btn', { 'is-active': voicing === o.v, 'is-disabled': o.disabled }]"
+                @click="!o.disabled && (voicing = o.v)"
               >
                 {{ o.label }}
               </button>
@@ -646,8 +651,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
     box-shadow 0.18s ease;
 }
 
-.segment__btn:hover {
+.segment__btn:hover:not(.is-disabled) {
   color: var(--text);
+}
+
+.segment__btn.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .segment__btn.is-active {
