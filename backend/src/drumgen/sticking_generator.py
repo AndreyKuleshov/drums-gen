@@ -89,7 +89,7 @@ _FAMILY_WEIGHT: dict[Family, float] = {"singles": 1.0, "odd": 2.6, "paradiddle":
 _BLOCK_LABEL: dict[Family, tuple[str, ...]] = {
     "singles": ("", "", "", ""),
     "odd": ("3", "5", "7"),
-    "paradiddle": ("Para", "Dbl para", "Para-diddle"),
+    "paradiddle": ("Para", "Dbl para", "Para-diddle-diddle"),
 }
 
 # A packer candidate: the block, its selection weight, and its bracket label.
