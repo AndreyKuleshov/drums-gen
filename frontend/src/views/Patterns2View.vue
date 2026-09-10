@@ -46,10 +46,27 @@ const error = ref('')
 // orchestration, opposite lead hand — as a view transform over the current
 // pattern (rendered and played mirrored).
 const mirrored = ref(false)
+// Snare<->Kit re-voice: lay the current snare sticking across the kit (snare/
+// toms/hi-hat, no kick) WITHOUT regenerating. The re-voiced groove is fetched
+// once and cached; the toggle just swaps which one is shown.
+const revoiced = ref(false)
+const revoicedGroove = ref<Groove | null>(null)
+const revoicing = ref(false)
+
+// Only a snare Phrase can be re-voiced; a generated kit/linear Groove cannot.
+const canRevoice = computed(() => phrase.value !== null && groove.value === null)
+// What's on screen: a generated groove, or the re-voiced snare groove, else the
+// snare phrase.
+const displayGroove = computed<Groove | null>(
+  () => groove.value ?? (revoiced.value ? revoicedGroove.value : null),
+)
+const displayPhrase = computed<Phrase | null>(() =>
+  displayGroove.value === null ? phrase.value : null,
+)
 
 const flip = (h: 'L' | 'R'): 'L' | 'R' => (h === 'R' ? 'L' : 'R')
 const viewPhrase = computed<Phrase | null>(() => {
-  const p = phrase.value
+  const p = displayPhrase.value
   if (p === null || !mirrored.value) return p
   return {
     ...p,
@@ -60,7 +77,7 @@ const viewPhrase = computed<Phrase | null>(() => {
   }
 })
 const viewGroove = computed<Groove | null>(() => {
-  const g = groove.value
+  const g = displayGroove.value
   if (g === null || !mirrored.value) return g
   return {
     ...g,
@@ -72,7 +89,7 @@ const viewGroove = computed<Groove | null>(() => {
 })
 
 const transport = ref<InstanceType<typeof TransportRack> | null>(null)
-const canPlay = computed(() => phrase.value !== null || groove.value !== null)
+const canPlay = computed(() => displayPhrase.value !== null || displayGroove.value !== null)
 const meter = { num: 4, den: 4 }
 
 const phraseEngine: PlayEngine = {
@@ -87,7 +104,9 @@ const grooveEngine: PlayEngine = {
   },
   stop: stopGroove,
 }
-const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine : phraseEngine))
+const engine = computed<PlayEngine>(() =>
+  displayGroove.value !== null ? grooveEngine : phraseEngine,
+)
 
 // Favorites: save the pattern currently on screen (mirrored or not). A Groove is
 // stored as kind 'pattern' (rendered by GrooveScore in My Account), a Phrase as
@@ -95,8 +114,8 @@ const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 const likePayload = computed(() => viewGroove.value ?? viewPhrase.value)
 const likeMeta = computed<Record<string, unknown>>(() => ({
-  kind: groove.value !== null ? 'pattern' : 'exercise',
-  level: cap(voicing.value),
+  kind: displayGroove.value !== null ? 'pattern' : 'exercise',
+  level: revoiced.value ? 'Kit' : cap(voicing.value),
   meter: '4/4',
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
   bars: bars.value,
@@ -105,10 +124,9 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
 
 // --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
 // on the snare Phrase (one stroke at a time) and on kit/linear Grooves (every
-// hit sounding on the clicked onset cell). Accent/ghost toggle; ghost only
-// applies to the melodic voices (snare + toms).
+// hit sounding on the clicked onset cell). Accent/ghost toggle; ghost applies
+// only to the snare (ghost notes live nowhere else).
 const CELL = 1 / 32 // notation grid used by GrooveScore to key hits by onset
-const MELODIC = new Set(['snare', 'tom_high', 'tom_mid', 'tom_low'])
 type EditTarget =
   | { kind: 'phrase'; index: number }
   | { kind: 'groove'; bar: number; cell: number }
@@ -126,7 +144,7 @@ function noteAt(idx: number): { bar: number; i: number } | null {
 
 const cellOf = (h: Hit): number => Math.round(parseFraction(h.onset) / CELL)
 function hitsAtCell(bar: number, cell: number): Hit[] {
-  const b = groove.value?.bars[bar]
+  const b = (groove.value ?? revoicedGroove.value)?.bars[bar]
   return b ? b.hands.filter((h) => cellOf(h) === cell) : []
 }
 
@@ -143,7 +161,7 @@ const editorNote = computed(() => {
   return {
     accent: hits.some((h) => h.accent),
     ghost: hits.some((h) => h.ghost),
-    canGhost: hits.some((h) => MELODIC.has(h.surface)),
+    canGhost: hits.some((h) => h.surface === 'snare'),
     canFlip: hits.some((h) => h.hand !== null),
   }
 })
@@ -179,13 +197,15 @@ function setPhraseNote(index: number, action: 'accent' | 'ghost' | 'flip'): void
 }
 
 function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | 'flip'): void {
-  const g = groove.value
+  // Mutate whichever groove is on screen — a generated one or the re-voiced snare.
+  const target = groove.value !== null ? groove : revoicedGroove
+  const g = target.value
   if (g === null) return
   const hits = hitsAtCell(bar, cell)
   if (hits.length === 0) return
   const nextAccent = !hits.some((h) => h.accent)
   const nextGhost = !hits.some((h) => h.ghost)
-  groove.value = {
+  target.value = {
     ...g,
     bars: g.bars.map((b, bi) =>
       bi !== bar
@@ -200,7 +220,8 @@ function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | '
               if (action === 'accent') {
                 return { ...h, accent: nextAccent, ghost: nextAccent ? false : h.ghost }
               }
-              if (!MELODIC.has(h.surface)) return h
+              // Ghost notes live only on the snare.
+              if (h.surface !== 'snare') return h
               return { ...h, ghost: nextGhost, accent: nextGhost ? false : h.accent }
             }),
           },
@@ -215,12 +236,43 @@ function setNote(action: 'accent' | 'ghost' | 'flip'): void {
   else setGrooveNote(e.target.bar, e.target.cell, action)
 }
 
+// Snare<->Kit toggle: re-voice the current snare phrase across the kit (fetched
+// once, then cached) or flip back to the plain snare. No regeneration — the
+// sticking is unchanged.
+async function toggleRevoice(): Promise<void> {
+  if (!canRevoice.value) return
+  transport.value?.stop()
+  activeStep.value = null
+  editor.value = null
+  if (revoiced.value) {
+    revoiced.value = false
+    return
+  }
+  if (revoicedGroove.value === null && phrase.value !== null) {
+    revoicing.value = true
+    try {
+      revoicedGroove.value = await apiFetch<Groove>('/patterns2/revoice', {
+        method: 'POST',
+        body: JSON.stringify(phrase.value),
+      })
+    } catch (e) {
+      error.value = e instanceof ApiError ? e.message : 'Couldn’t re-voice to the kit.'
+      return
+    } finally {
+      revoicing.value = false
+    }
+  }
+  revoiced.value = true
+}
+
 async function generate(): Promise<void> {
   // Regenerating stops any playing pattern (same as the Studio tab), so the old
   // pattern doesn't keep sounding under the new one.
   transport.value?.stop()
   activeStep.value = null
   mirrored.value = false // a fresh pattern starts on its natural sticking
+  revoiced.value = false
+  revoicedGroove.value = null
   editor.value = null
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
@@ -427,6 +479,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               <span class="inline__sep">bpm</span>
             </div>
           </div>
+
+          <button
+            v-if="canRevoice"
+            type="button"
+            class="altstick"
+            :class="{ 'is-active': revoiced }"
+            :disabled="revoicing"
+            :aria-pressed="revoiced"
+            data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+            @click="toggleRevoice"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+            Kit
+          </button>
 
           <button
             type="button"

@@ -31,6 +31,9 @@ const container = ref<HTMLDivElement | null>(null)
 // SVG <g> element for each note, in global order, for playback highlighting.
 let noteEls: (SVGElement | undefined)[] = []
 
+// Muted colour for ghost noteheads — shared look with the kit/linear grooves.
+const GHOST_COLOR = '#8a7d68'
+
 // Layout constants (px).
 const LEFT_MARGIN = 10
 // Extra headroom above the stave leaves room for the block brackets + labels
@@ -119,6 +122,9 @@ function render(phrase: Phrase): void {
       note.addModifier(
         new Annotation(label).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
       )
+      // Ghost notes read as a grey notehead everywhere (no parentheses), matching
+      // the kit/linear grooves.
+      if (spec.ghost) note.setKeyStyle(0, { fillStyle: GHOST_COLOR, strokeStyle: GHOST_COLOR })
       // Accents are drawn manually (below) rather than as VexFlow articulations,
       // so the tuplet bracket doesn't get pushed up to clear them — that keeps
       // brackets on one level with the accents sitting above them.
@@ -170,19 +176,6 @@ function render(phrase: Phrase): void {
       }
     }
 
-    // Ghost notes: parentheses around the notehead, drawn manually (consistent
-    // with the manual accent marks above) so no extra VexFlow modifier is needed.
-    const ghostIdx = specs.flatMap((s, i) => (s.ghost ? [i] : []))
-    if (ghostIdx.length > 0) {
-      context.setFont('Georgia, serif', 15, 'normal')
-      for (const i of ghostIdx) {
-        const x = notes[i].getAbsoluteX()
-        const y = notes[i].getYs()[0]
-        context.fillText('(', x - 9, y + 5)
-        context.fillText(')', x + 7, y + 5)
-      }
-    }
-
     // Block brackets (Patterns 2.0): a square bracket + label over each run of
     // notes from one vocabulary block. Labels come from the backend; singles are
     // unlabelled, so they get no bracket.
@@ -220,7 +213,17 @@ function render(phrase: Phrase): void {
         context.fillRect(x0, bracketY, x1 - x0, TH) // horizontal line
         context.fillRect(x0, bracketY, TH, HOOK) // left down-hook
         context.fillRect(x1 - TH, bracketY, TH, HOOK) // right down-hook
-        const w = context.measureText(grp.label).width
+        // Shrink an over-long label to fit its own bracket span, so adjacent
+        // groups' labels never overlap.
+        let fs = 10
+        context.setFont('Georgia, serif', fs, 'normal')
+        let w = context.measureText(grp.label).width
+        const span = x1 - x0 - 2
+        if (w > span) {
+          fs = Math.max(6.5, (fs * span) / w)
+          context.setFont('Georgia, serif', fs, 'normal')
+          w = context.measureText(grp.label).width
+        }
         context.fillText(grp.label, (x0 + x1) / 2 - w / 2, bracketY - 4)
       }
     }

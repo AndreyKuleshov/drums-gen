@@ -2,11 +2,18 @@ from fractions import Fraction
 
 import pytest
 
-from drumgen.domain.enums import Hand, Surface
+from drumgen.domain.enums import Surface
 from drumgen.domain.groove import Groove
 from drumgen.domain.models import Phrase, TimeSignature
 from drumgen.generator import GenerationError
-from drumgen.sticking_generator import VOCAB, StickingRequest, generate_sticking, mirror, rules_hold
+from drumgen.sticking_generator import (
+    VOCAB,
+    StickingRequest,
+    generate_sticking,
+    mirror,
+    revoice_kit,
+    rules_hold,
+)
 
 
 def test_vocab_has_three_families_with_expected_lengths():
@@ -172,7 +179,8 @@ def test_kit_voicing_returns_a_groove_across_the_kit():
     assert isinstance(g, Groove)
     assert len(g.bars) == 2
     surfaces = {h.surface for bar in g.bars for h in bar.hands}
-    # accents ride snare + toms; ghosts split to hi-hat (R) and snare (L)
+    # accents ride snare + toms; non-accents split to hi-hat (R) and snare (L),
+    # and only the snare ones are ghosts
     assert Surface.HIHAT in surfaces
     assert surfaces & {Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW}
     # kick grounds every bar on the downbeat
@@ -197,18 +205,37 @@ def test_kit_preserves_the_sticking_hand_rules():
         assert rules_hold(_hand_seq(g))
 
 
-def test_kit_accents_are_accents_and_ghosts_are_ghosts():
+def test_revoice_kit_relays_snare_with_no_kick_and_ghosts_on_snare():
+    phrase = _snare(num_bars=2, seed=5)
+    g = revoice_kit(phrase)
+    assert isinstance(g, Groove)
+    # Same rhythm re-laid: one hands hit per snare stroke, and no feet (no kick).
+    for gb, pb in zip(g.bars, phrase.bars, strict=True):
+        assert len(gb.hands) == len(pb.strokes)
+        assert gb.feet == []
+    surfaces = {h.surface for bar in g.bars for h in bar.hands}
+    assert Surface.KICK not in surfaces
+    assert Surface.HIHAT in surfaces
+    for bar in g.bars:
+        for h in bar.hands:
+            if h.ghost:
+                assert h.surface is Surface.SNARE
+    # Deterministic: re-voicing the same phrase yields an identical groove.
+    assert revoice_kit(phrase).model_dump() == g.model_dump()
+
+
+def test_kit_ghosts_live_only_on_the_snare():
     g = generate_sticking(_req(num_bars=2, seed=5, voicing="kit"))
     assert isinstance(g, Groove)
     for bar in g.bars:
         for h in bar.hands:
-            assert h.accent != h.ghost  # every hand stroke is accent xor ghost
-        # ghosts on the right hand become hi-hat; on the left, snare
-        for h in bar.hands:
-            if h.ghost and h.hand is Hand.R:
-                assert h.surface is Surface.HIHAT
-            if h.ghost and h.hand is Hand.L:
+            assert not (h.accent and h.ghost)  # never both at once
+            # Ghost notes exist ONLY on the snare; a hi-hat note is a plain
+            # timekeeping stroke, never a ghost.
+            if h.ghost:
                 assert h.surface is Surface.SNARE
+            if h.surface is Surface.HIHAT:
+                assert not h.ghost
 
 
 def test_kit_kick_pattern_varies_across_seeds():

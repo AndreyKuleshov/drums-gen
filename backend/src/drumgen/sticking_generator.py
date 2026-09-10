@@ -253,7 +253,7 @@ def generate_sticking(req: StickingRequest) -> Phrase | Groove:
     if req.voicing == "linear":
         return _orchestrate_linear(stream, slots, req, rng)
     if req.voicing == "kit":
-        return _orchestrate_kit(stream, slots, req, rng)
+        return _orchestrate_kit(stream, slots, req, rng, note_meta)
     return _snare_phrase(stream, slots, note_meta, req)
 
 
@@ -307,8 +307,51 @@ def _lead_surface(onset: Fraction, beat_len: Fraction, lead_start: int, bar: int
     return _LEAD_ORDER[(beat_i + lead_start + bar) % len(_LEAD_ORDER)]
 
 
+def _kit_hand_hit(
+    onset: Fraction,
+    dur: Fraction,
+    hand: Hand,
+    accent: bool,
+    beat_len: Fraction,
+    lead_start: int,
+    bar: int,
+    block: int = -1,
+    block_label: str = "",
+) -> Hit:
+    """One hands-voice hit for the kit orchestration: an accent rides the snare/tom
+    lead, a non-accent goes to the hi-hat (right hand) or snare (left). Ghost notes
+    exist ONLY on the snare — a hi-hat note is a plain timekeeping note, never a
+    ghost. `block`/`block_label` carry the vocabulary-block tag for the labelled
+    bracket over the group."""
+    if accent:
+        surface = _lead_surface(onset, beat_len, lead_start, bar)
+        return Hit(
+            onset=onset,
+            duration=dur,
+            surface=surface,
+            hand=hand,
+            accent=True,
+            block=block,
+            block_label=block_label,
+        )
+    surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
+    return Hit(
+        onset=onset,
+        duration=dur,
+        surface=surface,
+        hand=hand,
+        ghost=surface is Surface.SNARE,
+        block=block,
+        block_label=block_label,
+    )
+
+
 def _orchestrate_kit(
-    stream: list[Note], slots: Slots, req: StickingRequest, rng: random.Random
+    stream: list[Note],
+    slots: Slots,
+    req: StickingRequest,
+    rng: random.Random,
+    note_meta: list[tuple[int, str]],
 ) -> Groove:
     """Accents ride snare/toms (moving a step down the kit each beat), ghosts split
     to hi-hat (right hand) and snare (left), and a simultaneous kick foundation
@@ -332,16 +375,12 @@ def _orchestrate_kit(
         hands: list[Hit] = []
         for onset, dur in bar_slots:
             hand_char, accent = stream[idx]
+            block_id, label = note_meta[idx]
             idx += 1
-            hand = Hand(hand_char)
-            if accent:
-                surface = _lead_surface(onset, beat_len, lead_start, b)
-                hands.append(
-                    Hit(onset=onset, duration=dur, surface=surface, hand=hand, accent=True)
-                )
-            else:
-                surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
-                hands.append(Hit(onset=onset, duration=dur, surface=surface, hand=hand, ghost=True))
+            hit = _kit_hand_hit(
+                onset, dur, Hand(hand_char), accent, beat_len, lead_start, b, block_id, label
+            )
+            hands.append(hit)
 
         feet: list[Hit] = [Hit(onset=Fraction(0), duration=kick_dur, surface=Surface.KICK)]
         count = min(rng.randint(1, 3), len(eighth_grid))
@@ -390,9 +429,43 @@ def _orchestrate_linear(
                 )
             else:
                 surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
-                hands.append(Hit(onset=onset, duration=dur, surface=surface, hand=hand, ghost=True))
+                # Ghost notes only exist on the snare; a hi-hat note is plain.
+                hands.append(
+                    Hit(
+                        onset=onset,
+                        duration=dur,
+                        surface=surface,
+                        hand=hand,
+                        ghost=surface is Surface.SNARE,
+                    )
+                )
         bars.append(GrooveBar(time_sig=ts, hands=hands, feet=feet))
 
     return Groove(
         time_sig=ts, tempo_bpm=req.tempo_bpm, subdivision=_out_subdivision(req), bars=bars
+    )
+
+
+def revoice_kit(phrase: Phrase) -> Groove:
+    """Re-voice an existing snare Phrase across the kit WITHOUT regenerating it:
+    the same sticking, accents ride the snare/tom lead, non-accents split to
+    hi-hat (right) / snare (left), ghosts stay on the snare. No kick — this is a
+    hands-only re-lay of a sticking, not a full groove. Deterministic (lead fixed
+    at 0) so toggling to the kit and back is stable."""
+    ts = phrase.time_sig
+    beat_len = ts.beat_length
+    bars: list[GrooveBar] = []
+    for b, bar in enumerate(phrase.bars):
+        hands: list[Hit] = []
+        onset = Fraction(0)
+        for s in bar.strokes:
+            hands.append(
+                _kit_hand_hit(
+                    onset, s.duration, s.hand, s.accent, beat_len, 0, b, s.block, s.block_label
+                )
+            )
+            onset += s.duration
+        bars.append(GrooveBar(time_sig=ts, hands=hands, feet=[]))
+    return Groove(
+        time_sig=ts, tempo_bpm=phrase.tempo_bpm, subdivision=phrase.subdivision, bars=bars
     )
