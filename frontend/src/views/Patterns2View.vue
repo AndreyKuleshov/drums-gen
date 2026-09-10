@@ -56,6 +56,37 @@ const revoiced = ref(false)
 const revoicedGroove = ref<Groove | null>(null)
 const revoicing = ref(false)
 
+// Undo history: each editing action (note edit, kit shuffle) snapshots the whole
+// pattern state first, so Undo steps back through the last N actions. We only ever
+// REPLACE the refs (never mutate in place), so capturing the current refs is a
+// valid immutable snapshot.
+interface Snapshot {
+  phrase: Phrase | null
+  revoiced: boolean
+  revoicedGroove: Groove | null
+}
+const UNDO_LIMIT = 25
+const undoStack = ref<Snapshot[]>([])
+const canUndo = computed(() => undoStack.value.length > 0)
+function pushUndo(): void {
+  undoStack.value.push({
+    phrase: phrase.value,
+    revoiced: revoiced.value,
+    revoicedGroove: revoicedGroove.value,
+  })
+  if (undoStack.value.length > UNDO_LIMIT) undoStack.value.shift()
+}
+function undo(): void {
+  const s = undoStack.value.pop()
+  if (s === undefined) return
+  transport.value?.stop()
+  activeStep.value = null
+  editor.value = null
+  phrase.value = s.phrase
+  revoiced.value = s.revoiced
+  revoicedGroove.value = s.revoicedGroove
+}
+
 // Only a snare Phrase can be re-voiced; a generated kit/linear Groove cannot.
 const canRevoice = computed(() => phrase.value !== null && groove.value === null)
 // What's on screen: a generated groove, or the re-voiced snare groove, else the
@@ -235,6 +266,7 @@ function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | '
 function setNote(action: 'accent' | 'ghost' | 'flip'): void {
   const e = editor.value
   if (e === null) return
+  pushUndo()
   if (e.target.kind === 'phrase') setPhraseNote(e.target.index, action)
   else setGrooveNote(e.target.bar, e.target.cell, action)
 }
@@ -268,6 +300,29 @@ async function toggleRevoice(): Promise<void> {
   revoiced.value = true
 }
 
+// Shuffle: re-lay the SAME sticking across the kit differently (accents land on
+// other drums). No regeneration — a seeded re-voice of the current phrase.
+async function shuffleKit(): Promise<void> {
+  if (!revoiced.value || phrase.value === null) return
+  const seed = Math.floor(Math.random() * 1_000_000)
+  revoicing.value = true
+  try {
+    const next = await apiFetch<Groove>(`/patterns2/revoice?seed=${seed}`, {
+      method: 'POST',
+      body: JSON.stringify(phrase.value),
+    })
+    pushUndo()
+    revoicedGroove.value = next
+    editor.value = null
+    transport.value?.stop()
+    activeStep.value = null
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'Couldn’t shuffle the kit.'
+  } finally {
+    revoicing.value = false
+  }
+}
+
 async function generate(): Promise<void> {
   // Regenerating stops any playing pattern (same as the Studio tab), so the old
   // pattern doesn't keep sounding under the new one.
@@ -276,6 +331,7 @@ async function generate(): Promise<void> {
   mirrored.value = false // a fresh pattern starts on its natural sticking
   revoiced.value = false
   revoicedGroove.value = null
+  undoStack.value = [] // a fresh pattern starts a fresh history
   editor.value = null
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
@@ -310,6 +366,12 @@ async function generate(): Promise<void> {
 }
 
 function onGlobalKey(e: KeyboardEvent): void {
+  // Undo: Cmd/Ctrl+Z (checked before the modifier guard below).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyZ') {
+    e.preventDefault()
+    undo()
+    return
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -501,6 +563,47 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
             </svg>
             Kit
+          </button>
+
+          <button
+            v-if="revoiced"
+            type="button"
+            class="altstick"
+            :disabled="revoicing"
+            data-tip="Re-lay the same pattern across the kit differently"
+            @click="shuffleKit"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path
+                d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Shuffle
+          </button>
+
+          <button
+            v-if="canUndo"
+            type="button"
+            class="altstick"
+            data-tip="Undo the last change (⌘Z)"
+            @click="undo"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path
+                d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Undo
           </button>
 
           <button

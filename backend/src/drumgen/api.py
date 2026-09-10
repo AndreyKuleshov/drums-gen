@@ -73,9 +73,10 @@ def post_generate_patterns2(req: StickingRequest) -> Phrase | Groove:
 
 # Re-voice an already-generated snare Phrase across the kit (snare/toms/hi-hat,
 # no kick) without regenerating the sticking — powers the live Snare<->Kit toggle.
+# An optional `seed` shuffles which drums the accents land on (the shuffle button).
 @app.post("/patterns2/revoice")
-def post_revoice_patterns2(phrase: Phrase) -> Groove:
-    return revoice_kit(phrase)
+def post_revoice_patterns2(phrase: Phrase, seed: int | None = None) -> Groove:
+    return revoice_kit(phrase, seed)
 
 
 _FILLER_RUDIMENTS = frozenset({"single", "double"})

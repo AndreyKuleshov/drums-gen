@@ -300,11 +300,18 @@ def _snare_phrase(
     )
 
 
-def _lead_surface(onset: Fraction, beat_len: Fraction, lead_start: int, bar: int) -> Surface:
-    """Accented lead surface for `onset` — steps snare -> high -> mid -> low tom
-    each beat so the accents ride across the kit."""
+def _lead_surface(
+    onset: Fraction,
+    beat_len: Fraction,
+    lead_start: int,
+    bar: int,
+    order: list[Surface] = _LEAD_ORDER,
+) -> Surface:
+    """Accented lead surface for `onset` — steps through `order` each beat so the
+    accents ride across the kit. A shuffled `order` + `lead_start` re-lays the
+    same accents onto different drums."""
     beat_i = int(onset / beat_len)
-    return _LEAD_ORDER[(beat_i + lead_start + bar) % len(_LEAD_ORDER)]
+    return order[(beat_i + lead_start + bar) % len(order)]
 
 
 def _kit_hand_hit(
@@ -317,6 +324,7 @@ def _kit_hand_hit(
     bar: int,
     block: int = -1,
     block_label: str = "",
+    lead_order: list[Surface] = _LEAD_ORDER,
 ) -> Hit:
     """One hands-voice hit for the kit orchestration: an accent rides the snare/tom
     lead, a non-accent goes to the hi-hat (right hand) or snare (left). Ghost notes
@@ -324,7 +332,7 @@ def _kit_hand_hit(
     ghost. `block`/`block_label` carry the vocabulary-block tag for the labelled
     bracket over the group."""
     if accent:
-        surface = _lead_surface(onset, beat_len, lead_start, bar)
+        surface = _lead_surface(onset, beat_len, lead_start, bar, lead_order)
         return Hit(
             onset=onset,
             duration=dur,
@@ -446,14 +454,25 @@ def _orchestrate_linear(
     )
 
 
-def revoice_kit(phrase: Phrase) -> Groove:
+def revoice_kit(phrase: Phrase, seed: int | None = None) -> Groove:
     """Re-voice an existing snare Phrase across the kit WITHOUT regenerating it:
     the same sticking, accents ride the snare/tom lead, non-accents split to
     hi-hat (right) / snare (left), ghosts stay on the snare. No kick — this is a
-    hands-only re-lay of a sticking, not a full groove. Deterministic (lead fixed
-    at 0) so toggling to the kit and back is stable."""
+    hands-only re-lay of a sticking, not a full groove.
+
+    With `seed=None` the lead is fixed (lead 0, natural order) so the first
+    toggle to the kit is stable. A `seed` shuffles the lead order and starting
+    drum, so the SAME sticking lands on different drums — that powers the
+    'shuffle the kit layout' button."""
     ts = phrase.time_sig
     beat_len = ts.beat_length
+    if seed is None:
+        lead_start, order = 0, _LEAD_ORDER
+    else:
+        rng = random.Random(seed)
+        order = list(_LEAD_ORDER)
+        rng.shuffle(order)
+        lead_start = rng.randrange(len(order))
     bars: list[GrooveBar] = []
     for b, bar in enumerate(phrase.bars):
         hands: list[Hit] = []
@@ -461,7 +480,16 @@ def revoice_kit(phrase: Phrase) -> Groove:
         for s in bar.strokes:
             hands.append(
                 _kit_hand_hit(
-                    onset, s.duration, s.hand, s.accent, beat_len, 0, b, s.block, s.block_label
+                    onset,
+                    s.duration,
+                    s.hand,
+                    s.accent,
+                    beat_len,
+                    lead_start,
+                    b,
+                    s.block,
+                    s.block_label,
+                    order,
                 )
             )
             onset += s.duration

@@ -224,6 +224,28 @@ def test_revoice_kit_relays_snare_with_no_kick_and_ghosts_on_snare():
     assert revoice_kit(phrase).model_dump() == g.model_dump()
 
 
+def test_revoice_kit_shuffle_varies_layout_but_keeps_rhythm():
+    phrase = _snare(num_bars=2, seed=5)
+    base = revoice_kit(phrase)
+    # A given seed is deterministic; different seeds re-lay the accents onto
+    # different drums.
+    assert revoice_kit(phrase, seed=1).model_dump() == revoice_kit(phrase, seed=1).model_dump()
+    surface_sets: set[tuple[str, ...]] = set()
+    for seed in range(8):
+        g = revoice_kit(phrase, seed=seed)
+        # Same rhythm as the un-shuffled re-voice: identical onsets, accents, ghosts.
+        for gb, bb in zip(g.bars, base.bars, strict=True):
+            assert [(str(h.onset), h.accent, h.ghost) for h in gb.hands] == [
+                (str(h.onset), h.accent, h.ghost) for h in bb.hands
+            ]
+            assert gb.feet == []  # still no kick
+            for h in gb.hands:
+                if h.ghost:
+                    assert h.surface is Surface.SNARE  # ghosts stay on the snare
+        surface_sets.add(tuple(str(h.surface) for bar in g.bars for h in bar.hands))
+    assert len(surface_sets) >= 3  # several distinct kit layouts
+
+
 def test_kit_ghosts_live_only_on_the_snare():
     g = generate_sticking(_req(num_bars=2, seed=5, voicing="kit"))
     assert isinstance(g, Groove)
