@@ -453,6 +453,90 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         </div>
       </section>
 
+      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
+           separate from the generation form below. Buttons hold their slots
+           (disabled when N/A) so the bar never reflows. -->
+      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': revoiced }"
+          :disabled="!canRevoice || revoicing"
+          :aria-pressed="revoiced"
+          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+          @click="toggleRevoice"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          Kit
+        </button>
+        <button
+          type="button"
+          class="ptools__btn"
+          :disabled="!revoiced || revoicing"
+          data-tip="Re-lay the same pattern across the kit differently"
+          @click="shuffleKit"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Shuffle
+        </button>
+
+        <span class="ptools__sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': mirrored }"
+          :aria-pressed="mirrored"
+          data-tip="Mirror the whole sticking R↔L"
+          @click="mirrored = !mirrored"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Alt sticking
+        </button>
+
+        <button
+          type="button"
+          class="ptools__btn ptools__btn--end"
+          :disabled="!canUndo"
+          data-tip="Undo the last change (⌘Z)"
+          @click="undo"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Undo
+        </button>
+      </div>
+
       <TransportRack
         ref="transport"
         :can-play="canPlay"
@@ -546,87 +630,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               <span class="inline__sep">bpm</span>
             </div>
           </div>
-
-          <button
-            v-if="canRevoice"
-            type="button"
-            class="altstick"
-            :class="{ 'is-active': revoiced }"
-            :disabled="revoicing"
-            :aria-pressed="revoiced"
-            data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
-            @click="toggleRevoice"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-            </svg>
-            Kit
-          </button>
-
-          <button
-            v-if="revoiced"
-            type="button"
-            class="altstick"
-            :disabled="revoicing"
-            data-tip="Re-lay the same pattern across the kit differently"
-            @click="shuffleKit"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path
-                d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Shuffle
-          </button>
-
-          <button
-            v-if="canUndo"
-            type="button"
-            class="altstick"
-            data-tip="Undo the last change (⌘Z)"
-            @click="undo"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path
-                d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Undo
-          </button>
-
-          <button
-            type="button"
-            class="altstick"
-            :class="{ 'is-active': mirrored }"
-            :disabled="!canPlay"
-            :aria-pressed="mirrored"
-            data-tip="Mirror the whole sticking R↔L"
-            @click="mirrored = !mirrored"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path
-                d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Alt sticking
-          </button>
 
           <button
             class="btn-primary controls__go"
@@ -787,15 +790,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   min-width: 160px;
 }
 
-/* "Alternate sticking" toggle — mirrors the current pattern's hands R<->L. */
-.altstick {
+/* Pattern-actions toolbar: transforms/edits on the current pattern, sitting
+   between the notation and the transport, separate from the generation form. */
+.ptools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
+}
+
+.ptools__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--edge);
+}
+
+.ptools__btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 9px 13px;
   border-radius: var(--r-md);
-  border: 1px solid var(--edge);
-  background: linear-gradient(180deg, var(--raised), var(--panel));
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-dim);
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -803,20 +827,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   cursor: pointer;
   transition:
     color 0.15s ease,
+    background 0.15s ease,
     box-shadow 0.18s ease;
 }
 
-.altstick:hover:not(:disabled) {
+.ptools__btn--end {
+  margin-left: auto;
+}
+
+.ptools__btn:hover:not(:disabled) {
   color: var(--text);
+  background: #100e0c;
 }
 
-.altstick.is-active {
+/* Toggles (Kit, Alt sticking) light amber when engaged; one-shot actions
+   (Shuffle, Undo) never take this state, so state reads at a glance. */
+.ptools__btn.is-active {
   color: var(--amber-bright);
-  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.28);
 }
 
-.altstick:disabled {
-  opacity: 0.4;
+.ptools__btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
