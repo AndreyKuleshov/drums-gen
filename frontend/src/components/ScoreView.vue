@@ -31,9 +31,6 @@ const container = ref<HTMLDivElement | null>(null)
 // SVG <g> element for each note, in global order, for playback highlighting.
 let noteEls: (SVGElement | undefined)[] = []
 
-// Muted colour for ghost noteheads — shared look with the kit/linear grooves.
-const GHOST_COLOR = '#8a7d68'
-
 // Layout constants (px).
 const LEFT_MARGIN = 10
 // Extra headroom above the stave leaves room for the block brackets + labels
@@ -122,9 +119,9 @@ function render(phrase: Phrase): void {
       note.addModifier(
         new Annotation(label).setVerticalJustification(AnnotationVerticalJustify.BOTTOM),
       )
-      // Ghost notes read as a grey notehead everywhere (no parentheses), matching
-      // the kit/linear grooves.
-      if (spec.ghost) note.setKeyStyle(0, { fillStyle: GHOST_COLOR, strokeStyle: GHOST_COLOR })
+      // Ghost notes read as a grey notehead. setKeyStyle can't be used here — the
+      // `.score svg path { fill }` ink rule repaints the notehead path — so the
+      // note is tagged with a `ghost` class and recoloured in CSS instead.
       // Accents are drawn manually (below) rather than as VexFlow articulations,
       // so the tuplet bracket doesn't get pushed up to clear them — that keeps
       // brackets on one level with the accents sitting above them.
@@ -228,7 +225,11 @@ function render(phrase: Phrase): void {
       }
     }
 
-    for (const note of notes) noteEls.push(note.getSVGElement())
+    notes.forEach((note, i) => {
+      const el = note.getSVGElement()
+      if (el && specs[i].ghost) el.classList.add('ghost')
+      noteEls.push(el)
+    })
   }
 
   // Focal reveal: a quick left-to-right light-up. Kept short so trailing notes

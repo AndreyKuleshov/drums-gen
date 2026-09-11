@@ -105,6 +105,14 @@ button:disabled {
   stroke: var(--ink);
 }
 
+/* Ghost noteheads (tagged with `ghost` on the stavenote): a muted grey head, so
+   soft strokes read at a glance. Scoped past the ink rule above, but excluded
+   while playing so the note-active highlight still wins. */
+.score svg g.vf-stavenote.ghost:not(.note-active) g.vf-notehead path {
+  fill: #8a7d68;
+  stroke: #8a7d68;
+}
+
 .score svg text {
   fill: var(--ink);
 }
