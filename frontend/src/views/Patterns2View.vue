@@ -24,11 +24,14 @@ const paradiddle = persistedRef('patterns2-paradiddle', true)
 // 'snare' = pure sticking; 'kit' = orchestrated across the kit (polyphonic);
 // 'linear' = one line across the kit, at most one stroke at a time.
 type Voicing = 'snare' | 'kit' | 'linear'
-const voicing = persistedRef<Voicing>('patterns2-voicing', 'linear')
-const voicings: { v: Voicing; label: string }[] = [
-  { v: 'linear', label: 'Linear' },
+// Only Snare is generatable for now: the kit is reached via the Snare<->Kit
+// re-voice toggle, and Linear is coming soon (disabled). Coerce any stale
+// persisted value back to Snare.
+const voicing = persistedRef<Voicing>('patterns2-voicing', 'snare')
+if (voicing.value !== 'snare') voicing.value = 'snare'
+const voicings: { v: Voicing; label: string; disabled?: boolean; tip?: string }[] = [
   { v: 'snare', label: 'Snare' },
-  { v: 'kit', label: 'Kit' },
+  { v: 'linear', label: 'Linear', disabled: true, tip: 'Coming soon' },
 ]
 // Subdivision doubles as a rhythm mode: '1/8'/'1/16' are uniform grids, 'mixed'
 // mixes both within a bar.
@@ -46,10 +49,58 @@ const error = ref('')
 // orchestration, opposite lead hand — as a view transform over the current
 // pattern (rendered and played mirrored).
 const mirrored = ref(false)
+// Snare<->Kit re-voice: lay the current snare sticking across the kit (snare/
+// toms/hi-hat, no kick) WITHOUT regenerating. The re-voiced groove is fetched
+// once and cached; the toggle just swaps which one is shown.
+const revoiced = ref(false)
+const revoicedGroove = ref<Groove | null>(null)
+const revoicing = ref(false)
+
+// Undo history: each editing action (note edit, kit shuffle) snapshots the whole
+// pattern state first, so Undo steps back through the last N actions. We only ever
+// REPLACE the refs (never mutate in place), so capturing the current refs is a
+// valid immutable snapshot.
+interface Snapshot {
+  phrase: Phrase | null
+  revoiced: boolean
+  revoicedGroove: Groove | null
+}
+const UNDO_LIMIT = 25
+const undoStack = ref<Snapshot[]>([])
+const canUndo = computed(() => undoStack.value.length > 0)
+function pushUndo(): void {
+  undoStack.value.push({
+    phrase: phrase.value,
+    revoiced: revoiced.value,
+    revoicedGroove: revoicedGroove.value,
+  })
+  if (undoStack.value.length > UNDO_LIMIT) undoStack.value.shift()
+}
+function undo(): void {
+  const s = undoStack.value.pop()
+  if (s === undefined) return
+  transport.value?.stop()
+  activeStep.value = null
+  editor.value = null
+  phrase.value = s.phrase
+  revoiced.value = s.revoiced
+  revoicedGroove.value = s.revoicedGroove
+}
+
+// Only a snare Phrase can be re-voiced; a generated kit/linear Groove cannot.
+const canRevoice = computed(() => phrase.value !== null && groove.value === null)
+// What's on screen: a generated groove, or the re-voiced snare groove, else the
+// snare phrase.
+const displayGroove = computed<Groove | null>(
+  () => groove.value ?? (revoiced.value ? revoicedGroove.value : null),
+)
+const displayPhrase = computed<Phrase | null>(() =>
+  displayGroove.value === null ? phrase.value : null,
+)
 
 const flip = (h: 'L' | 'R'): 'L' | 'R' => (h === 'R' ? 'L' : 'R')
 const viewPhrase = computed<Phrase | null>(() => {
-  const p = phrase.value
+  const p = displayPhrase.value
   if (p === null || !mirrored.value) return p
   return {
     ...p,
@@ -60,7 +111,7 @@ const viewPhrase = computed<Phrase | null>(() => {
   }
 })
 const viewGroove = computed<Groove | null>(() => {
-  const g = groove.value
+  const g = displayGroove.value
   if (g === null || !mirrored.value) return g
   return {
     ...g,
@@ -72,7 +123,7 @@ const viewGroove = computed<Groove | null>(() => {
 })
 
 const transport = ref<InstanceType<typeof TransportRack> | null>(null)
-const canPlay = computed(() => phrase.value !== null || groove.value !== null)
+const canPlay = computed(() => displayPhrase.value !== null || displayGroove.value !== null)
 const meter = { num: 4, den: 4 }
 
 const phraseEngine: PlayEngine = {
@@ -87,7 +138,9 @@ const grooveEngine: PlayEngine = {
   },
   stop: stopGroove,
 }
-const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine : phraseEngine))
+const engine = computed<PlayEngine>(() =>
+  displayGroove.value !== null ? grooveEngine : phraseEngine,
+)
 
 // Favorites: save the pattern currently on screen (mirrored or not). A Groove is
 // stored as kind 'pattern' (rendered by GrooveScore in My Account), a Phrase as
@@ -95,8 +148,8 @@ const engine = computed<PlayEngine>(() => (groove.value !== null ? grooveEngine 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 const likePayload = computed(() => viewGroove.value ?? viewPhrase.value)
 const likeMeta = computed<Record<string, unknown>>(() => ({
-  kind: groove.value !== null ? 'pattern' : 'exercise',
-  level: cap(voicing.value),
+  kind: displayGroove.value !== null ? 'pattern' : 'exercise',
+  level: revoiced.value ? 'Kit' : cap(voicing.value),
   meter: '4/4',
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
   bars: bars.value,
@@ -105,10 +158,9 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
 
 // --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
 // on the snare Phrase (one stroke at a time) and on kit/linear Grooves (every
-// hit sounding on the clicked onset cell). Accent/ghost toggle; ghost only
-// applies to the melodic voices (snare + toms).
+// hit sounding on the clicked onset cell). Accent/ghost toggle; ghost applies
+// only to the snare (ghost notes live nowhere else).
 const CELL = 1 / 32 // notation grid used by GrooveScore to key hits by onset
-const MELODIC = new Set(['snare', 'tom_high', 'tom_mid', 'tom_low'])
 type EditTarget =
   | { kind: 'phrase'; index: number }
   | { kind: 'groove'; bar: number; cell: number }
@@ -126,7 +178,7 @@ function noteAt(idx: number): { bar: number; i: number } | null {
 
 const cellOf = (h: Hit): number => Math.round(parseFraction(h.onset) / CELL)
 function hitsAtCell(bar: number, cell: number): Hit[] {
-  const b = groove.value?.bars[bar]
+  const b = (groove.value ?? revoicedGroove.value)?.bars[bar]
   return b ? b.hands.filter((h) => cellOf(h) === cell) : []
 }
 
@@ -143,7 +195,7 @@ const editorNote = computed(() => {
   return {
     accent: hits.some((h) => h.accent),
     ghost: hits.some((h) => h.ghost),
-    canGhost: hits.some((h) => MELODIC.has(h.surface)),
+    canGhost: hits.some((h) => h.surface === 'snare'),
     canFlip: hits.some((h) => h.hand !== null),
   }
 })
@@ -179,13 +231,15 @@ function setPhraseNote(index: number, action: 'accent' | 'ghost' | 'flip'): void
 }
 
 function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | 'flip'): void {
-  const g = groove.value
+  // Mutate whichever groove is on screen — a generated one or the re-voiced snare.
+  const target = groove.value !== null ? groove : revoicedGroove
+  const g = target.value
   if (g === null) return
   const hits = hitsAtCell(bar, cell)
   if (hits.length === 0) return
   const nextAccent = !hits.some((h) => h.accent)
   const nextGhost = !hits.some((h) => h.ghost)
-  groove.value = {
+  target.value = {
     ...g,
     bars: g.bars.map((b, bi) =>
       bi !== bar
@@ -200,7 +254,8 @@ function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | '
               if (action === 'accent') {
                 return { ...h, accent: nextAccent, ghost: nextAccent ? false : h.ghost }
               }
-              if (!MELODIC.has(h.surface)) return h
+              // Ghost notes live only on the snare.
+              if (h.surface !== 'snare') return h
               return { ...h, ghost: nextGhost, accent: nextGhost ? false : h.accent }
             }),
           },
@@ -211,8 +266,61 @@ function setGrooveNote(bar: number, cell: number, action: 'accent' | 'ghost' | '
 function setNote(action: 'accent' | 'ghost' | 'flip'): void {
   const e = editor.value
   if (e === null) return
+  pushUndo()
   if (e.target.kind === 'phrase') setPhraseNote(e.target.index, action)
   else setGrooveNote(e.target.bar, e.target.cell, action)
+}
+
+// Snare<->Kit toggle: re-voice the current snare phrase across the kit (fetched
+// once, then cached) or flip back to the plain snare. No regeneration — the
+// sticking is unchanged.
+async function toggleRevoice(): Promise<void> {
+  if (!canRevoice.value) return
+  transport.value?.stop()
+  activeStep.value = null
+  editor.value = null
+  if (revoiced.value) {
+    revoiced.value = false
+    return
+  }
+  if (revoicedGroove.value === null && phrase.value !== null) {
+    revoicing.value = true
+    try {
+      revoicedGroove.value = await apiFetch<Groove>('/patterns2/revoice', {
+        method: 'POST',
+        body: JSON.stringify(phrase.value),
+      })
+    } catch (e) {
+      error.value = e instanceof ApiError ? e.message : 'Couldn’t re-voice to the kit.'
+      return
+    } finally {
+      revoicing.value = false
+    }
+  }
+  revoiced.value = true
+}
+
+// Shuffle: re-lay the SAME sticking across the kit differently (accents land on
+// other drums). No regeneration — a seeded re-voice of the current phrase.
+async function shuffleKit(): Promise<void> {
+  if (!revoiced.value || phrase.value === null) return
+  const seed = Math.floor(Math.random() * 1_000_000)
+  revoicing.value = true
+  try {
+    const next = await apiFetch<Groove>(`/patterns2/revoice?seed=${seed}`, {
+      method: 'POST',
+      body: JSON.stringify(phrase.value),
+    })
+    pushUndo()
+    revoicedGroove.value = next
+    editor.value = null
+    transport.value?.stop()
+    activeStep.value = null
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'Couldn’t shuffle the kit.'
+  } finally {
+    revoicing.value = false
+  }
 }
 
 async function generate(): Promise<void> {
@@ -221,6 +329,9 @@ async function generate(): Promise<void> {
   transport.value?.stop()
   activeStep.value = null
   mirrored.value = false // a fresh pattern starts on its natural sticking
+  revoiced.value = false
+  revoicedGroove.value = null
+  undoStack.value = [] // a fresh pattern starts a fresh history
   editor.value = null
   error.value = ''
   if (!singles.value && !odd.value && !paradiddle.value) {
@@ -255,6 +366,12 @@ async function generate(): Promise<void> {
 }
 
 function onGlobalKey(e: KeyboardEvent): void {
+  // Undo: Cmd/Ctrl+Z (checked before the modifier guard below).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyZ') {
+    e.preventDefault()
+    undo()
+    return
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -336,6 +453,90 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         </div>
       </section>
 
+      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
+           separate from the generation form below. Buttons hold their slots
+           (disabled when N/A) so the bar never reflows. -->
+      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': revoiced }"
+          :disabled="!canRevoice || revoicing"
+          :aria-pressed="revoiced"
+          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+          @click="toggleRevoice"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          Kit
+        </button>
+        <button
+          type="button"
+          class="ptools__btn"
+          :disabled="!revoiced || revoicing"
+          data-tip="Re-lay the same pattern across the kit differently"
+          @click="shuffleKit"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Shuffle
+        </button>
+
+        <span class="ptools__sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': mirrored }"
+          :aria-pressed="mirrored"
+          data-tip="Mirror the whole sticking R↔L"
+          @click="mirrored = !mirrored"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Alt sticking
+        </button>
+
+        <button
+          type="button"
+          class="ptools__btn ptools__btn--end"
+          :disabled="!canUndo"
+          data-tip="Undo the last change (⌘Z)"
+          @click="undo"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Undo
+        </button>
+      </div>
+
       <TransportRack
         ref="transport"
         :can-play="canPlay"
@@ -388,8 +589,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
                 type="button"
                 role="radio"
                 :aria-checked="voicing === o.v"
-                :class="['segment__btn', { 'is-active': voicing === o.v }]"
-                @click="voicing = o.v"
+                :aria-disabled="o.disabled ? 'true' : undefined"
+                :data-tip="o.tip"
+                :class="['segment__btn', { 'is-active': voicing === o.v, 'is-disabled': o.disabled }]"
+                @click="!o.disabled && (voicing = o.v)"
               >
                 {{ o.label }}
               </button>
@@ -427,28 +630,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               <span class="inline__sep">bpm</span>
             </div>
           </div>
-
-          <button
-            type="button"
-            class="altstick"
-            :class="{ 'is-active': mirrored }"
-            :disabled="!canPlay"
-            :aria-pressed="mirrored"
-            data-tip="Mirror the whole sticking R↔L"
-            @click="mirrored = !mirrored"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path
-                d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Alt sticking
-          </button>
 
           <button
             class="btn-primary controls__go"
@@ -576,8 +757,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
     box-shadow 0.18s ease;
 }
 
-.segment__btn:hover {
+.segment__btn:hover:not(.is-disabled) {
   color: var(--text);
+}
+
+.segment__btn.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .segment__btn.is-active {
@@ -604,15 +790,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   min-width: 160px;
 }
 
-/* "Alternate sticking" toggle — mirrors the current pattern's hands R<->L. */
-.altstick {
+/* Pattern-actions toolbar: transforms/edits on the current pattern, sitting
+   between the notation and the transport, separate from the generation form. */
+.ptools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
+}
+
+.ptools__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--edge);
+}
+
+.ptools__btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 9px 13px;
   border-radius: var(--r-md);
-  border: 1px solid var(--edge);
-  background: linear-gradient(180deg, var(--raised), var(--panel));
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-dim);
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -620,20 +827,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   cursor: pointer;
   transition:
     color 0.15s ease,
+    background 0.15s ease,
     box-shadow 0.18s ease;
 }
 
-.altstick:hover:not(:disabled) {
+.ptools__btn--end {
+  margin-left: auto;
+}
+
+.ptools__btn:hover:not(:disabled) {
   color: var(--text);
+  background: #100e0c;
 }
 
-.altstick.is-active {
+/* Toggles (Kit, Alt sticking) light amber when engaged; one-shot actions
+   (Shuffle, Undo) never take this state, so state reads at a glance. */
+.ptools__btn.is-active {
   color: var(--amber-bright);
-  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+  background: linear-gradient(180deg, var(--raised-hi), var(--raised));
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.28);
 }
 
-.altstick:disabled {
-  opacity: 0.4;
+.ptools__btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 

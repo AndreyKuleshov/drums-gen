@@ -2,11 +2,18 @@ from fractions import Fraction
 
 import pytest
 
-from drumgen.domain.enums import Hand, Surface
+from drumgen.domain.enums import Surface
 from drumgen.domain.groove import Groove
 from drumgen.domain.models import Phrase, TimeSignature
 from drumgen.generator import GenerationError
-from drumgen.sticking_generator import VOCAB, StickingRequest, generate_sticking, mirror, rules_hold
+from drumgen.sticking_generator import (
+    VOCAB,
+    StickingRequest,
+    generate_sticking,
+    mirror,
+    revoice_kit,
+    rules_hold,
+)
 
 
 def test_vocab_has_three_families_with_expected_lengths():
@@ -91,11 +98,23 @@ def test_fills_exact_note_count_per_bar():
         assert all(s.duration == Fraction(1, 16) for s in bar.strokes)
 
 
-def test_every_note_is_accent_xor_ghost():
-    phrase = _snare(num_bars=4, seed=3)
-    for bar in phrase.bars:
-        for s in bar.strokes:
-            assert s.accent != s.ghost  # exactly one is true
+def test_stroke_is_accent_tap_or_ghost_never_both():
+    # A stroke is an accent, a ghost (a diddle) or a plain tap — never accent AND
+    # ghost at once. Ghosts are only the 2nd of a same-hand double.
+    phrase = _snare(num_bars=4, seed=3, odd=True, paradiddle=True, singles=False)
+    strokes = [s for bar in phrase.bars for s in bar.strokes]
+    for s in strokes:
+        assert not (s.accent and s.ghost)
+    # With diddles present the phrase is a genuine MIX: accents, taps and ghosts.
+    assert any(s.accent for s in strokes)
+    assert any(s.ghost for s in strokes)
+    assert any(not s.accent and not s.ghost for s in strokes)  # plain taps exist
+    # Every ghost repeats the previous hand (it's the 2nd of a diddle).
+    stream = _stream(phrase)
+    for i, s in enumerate(strokes):
+        if s.ghost:
+            assert i > 0
+            assert stream[i - 1][0] == stream[i][0]
 
 
 @pytest.mark.parametrize("seed", range(30))
@@ -172,7 +191,8 @@ def test_kit_voicing_returns_a_groove_across_the_kit():
     assert isinstance(g, Groove)
     assert len(g.bars) == 2
     surfaces = {h.surface for bar in g.bars for h in bar.hands}
-    # accents ride snare + toms; ghosts split to hi-hat (R) and snare (L)
+    # accents ride snare + toms; non-accents split to hi-hat (R) and snare (L),
+    # and only the snare ones are ghosts
     assert Surface.HIHAT in surfaces
     assert surfaces & {Surface.TOM_HIGH, Surface.TOM_MID, Surface.TOM_LOW}
     # kick grounds every bar on the downbeat
@@ -197,18 +217,59 @@ def test_kit_preserves_the_sticking_hand_rules():
         assert rules_hold(_hand_seq(g))
 
 
-def test_kit_accents_are_accents_and_ghosts_are_ghosts():
+def test_revoice_kit_relays_snare_with_no_kick_and_ghosts_on_snare():
+    phrase = _snare(num_bars=2, seed=5)
+    g = revoice_kit(phrase)
+    assert isinstance(g, Groove)
+    # Same rhythm re-laid: one hands hit per snare stroke, and no feet (no kick).
+    for gb, pb in zip(g.bars, phrase.bars, strict=True):
+        assert len(gb.hands) == len(pb.strokes)
+        assert gb.feet == []
+    surfaces = {h.surface for bar in g.bars for h in bar.hands}
+    assert Surface.KICK not in surfaces
+    assert Surface.HIHAT in surfaces
+    for bar in g.bars:
+        for h in bar.hands:
+            if h.ghost:
+                assert h.surface is Surface.SNARE
+    # Deterministic: re-voicing the same phrase yields an identical groove.
+    assert revoice_kit(phrase).model_dump() == g.model_dump()
+
+
+def test_revoice_kit_shuffle_varies_layout_but_keeps_rhythm():
+    phrase = _snare(num_bars=2, seed=5)
+    base = revoice_kit(phrase)
+    # A given seed is deterministic; different seeds re-lay the accents onto
+    # different drums.
+    assert revoice_kit(phrase, seed=1).model_dump() == revoice_kit(phrase, seed=1).model_dump()
+    surface_sets: set[tuple[str, ...]] = set()
+    for seed in range(8):
+        g = revoice_kit(phrase, seed=seed)
+        # Same rhythm as the un-shuffled re-voice: identical onsets, accents, ghosts.
+        for gb, bb in zip(g.bars, base.bars, strict=True):
+            assert [(str(h.onset), h.accent, h.ghost) for h in gb.hands] == [
+                (str(h.onset), h.accent, h.ghost) for h in bb.hands
+            ]
+            assert gb.feet == []  # still no kick
+            for h in gb.hands:
+                if h.ghost:
+                    assert h.surface is Surface.SNARE  # ghosts stay on the snare
+        surface_sets.add(tuple(str(h.surface) for bar in g.bars for h in bar.hands))
+    assert len(surface_sets) >= 3  # several distinct kit layouts
+
+
+def test_kit_ghosts_live_only_on_the_snare():
     g = generate_sticking(_req(num_bars=2, seed=5, voicing="kit"))
     assert isinstance(g, Groove)
     for bar in g.bars:
         for h in bar.hands:
-            assert h.accent != h.ghost  # every hand stroke is accent xor ghost
-        # ghosts on the right hand become hi-hat; on the left, snare
-        for h in bar.hands:
-            if h.ghost and h.hand is Hand.R:
-                assert h.surface is Surface.HIHAT
-            if h.ghost and h.hand is Hand.L:
+            assert not (h.accent and h.ghost)  # never both at once
+            # Ghost notes exist ONLY on the snare; a hi-hat note is a plain
+            # timekeeping stroke, never a ghost.
+            if h.ghost:
                 assert h.surface is Surface.SNARE
+            if h.surface is Surface.HIHAT:
+                assert not h.ghost
 
 
 def test_kit_kick_pattern_varies_across_seeds():

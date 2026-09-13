@@ -51,12 +51,15 @@ const CELL = 1 / 32 // notation grid (every onset lands here — supports 32nds 
 // Layout (px). Bars wrap into rows fitted to the container so the phrase never
 // scrolls horizontally.
 const LEFT = 10
-const TOP = 52 // headroom above the stave for accents + the R/L sticking line
+const TOP = 66 // headroom above the stave for the bracket, accents + R/L sticking
 const ROW_HEIGHT = 160
-const CLEF_W = 52
-// Bars are sized by the width VexFlow needs for their notes (measured per bar), so
-// notes never spill past the barline; the whole SVG then scales to fit the screen.
-const MIN_BAR_W = 112
+// Bar sizing MUST match ScoreView.vue exactly (same CLEF/MIN/PX constants and
+// count-based formula) so a bar keeps its width when the Snare<->Kit toggle
+// swaps a snare Phrase for its re-voiced Groove.
+const CLEF_W = 60
+const MIN_BAR_W = 140
+const PX_PER_NOTE = 30
+const MIN_PX_PER_NOTE = 12
 const DEFAULT_LINE_W = 1000
 
 // Cell-count -> note tokens. Power-of-two durations ONLY: VexFlow's Dot modifier
@@ -97,6 +100,9 @@ interface NoteItem {
   cell: number | null
   hand?: 'R' | 'L' | null
   accent?: boolean
+  /** Vocabulary-block instance + label for the grouping bracket (-1 = none). */
+  block?: number
+  blockLabel?: string
 }
 
 function makeRest(code: string, dots: number, up: boolean): NoteItem {
@@ -175,7 +181,9 @@ function buildHandsVoice(bar: GrooveBar, cells: number): NoteItem[] {
     if (c > pos) for (const t of decompose(c - pos)) items.push(makeRest(t.code, t.dots, true))
     const next = i + 1 < cellsWithHits.length ? cellsWithHits[i + 1] : cells
     const [head, ...tail] = decompose(next - c)
-    const { keys, ghostIdx, open, accent, hand, art } = keysFor(byCell.get(c) ?? [])
+    const cellHits = byCell.get(c) ?? []
+    const { keys, ghostIdx, open, accent, hand, art } = keysFor(cellHits)
+    const tagged = cellHits.find((h) => (h.block ?? -1) >= 0 && h.block_label)
     const note = new StaveNote({ keys, duration: head.code, stem_direction: 1 })
     for (let d = 0; d < head.dots; d++) Dot.buildAndAttach([note])
     // Flam = one slashed grace; drag = two beamed graces — on the same drum.
@@ -194,7 +202,14 @@ function buildHandsVoice(bar: GrooveBar, cells: number): NoteItem[] {
     for (const gi of ghostIdx) note.setKeyStyle(gi, { fillStyle: '#8a7d68', strokeStyle: '#8a7d68' })
     // Accents (>) and sticking (R/L) are drawn manually after layout on uniform
     // lines — not as per-note modifiers, which would jump with stem heights.
-    items.push({ note, cell: c, hand, accent })
+    items.push({
+      note,
+      cell: c,
+      hand,
+      accent,
+      block: tagged?.block ?? -1,
+      blockLabel: tagged?.block_label ?? '',
+    })
     for (const t of tail) items.push(makeRest(t.code, t.dots, true))
     pos = next
   }
@@ -254,14 +269,15 @@ interface BarBuilt {
   hands: NoteItem[]
   feet: NoteItem[]
   handsVoice: Voice
-  feetVoice: Voice
+  feetVoice: Voice | null
   beams: Beam[]
-  minW: number // the width VexFlow actually needs for the notes (no clef)
+  noteCount: number // played onsets in the bar — drives width (same as ScoreView)
 }
 
 function layoutBars(
   built: BarBuilt[],
   lineWidth: number,
+  pxPerNote: number,
 ): { rows: BarLayout[]; height: number; contentW: number } {
   const rows: BarLayout[] = []
   let x = LEFT
@@ -269,9 +285,13 @@ function layoutBars(
   let firstInRow = true
   let contentW = 0
 
+  // Same width formula as ScoreView: notes × pxPerNote, clamped between a minimum
+  // and the line width, so identical patterns get identical bar widths.
   const widthOf = (i: number, first: boolean): number => {
     const clef = first ? CLEF_W : 0
-    return Math.max(MIN_BAR_W + clef, built[i].minW + clef + INNER_PAD)
+    const natural = built[i].noteCount * pxPerNote + clef
+    const min = Math.min(MIN_BAR_W + clef, lineWidth - LEFT * 2)
+    return Math.min(Math.max(min, natural), lineWidth - LEFT * 2)
   }
 
   built.forEach((b, i) => {
@@ -305,7 +325,7 @@ function render(): void {
   // content (flex child), which would feed a stale wide width back in and overflow.
   const parentW = host.parentElement?.clientWidth ?? host.clientWidth
   const avail = parentW - 20
-  const lineWidth = avail > 60 ? avail : DEFAULT_LINE_W
+  const lineWidth = avail > 2 * MIN_BAR_W ? avail : DEFAULT_LINE_W
 
   const groups = [new VFraction(1, 4)]
   // Pass 1: build each bar's voices + beams and measure the width VexFlow really
@@ -314,13 +334,15 @@ function render(): void {
   const built: BarBuilt[] = bars.map((bar) => {
     const cells = barCells(bar)
     const hands = buildHandsVoice(bar, cells)
-    const feet = buildFeetVoice(bar, cells)
+    // Skip the feet voice entirely when the bar has no kick — a re-voiced snare
+    // pattern has no feet, and an empty voice would draw a stray whole rest.
+    const feet = bar.feet.length > 0 ? buildFeetVoice(bar, cells) : []
     const mk = (items: NoteItem[]): Voice =>
       new Voice({ num_beats: bar.time_sig.num, beat_value: bar.time_sig.den })
         .setStrict(false)
         .addTickables(items.map((it) => it.note))
     const handsVoice = mk(hands)
-    const feetVoice = mk(feet)
+    const feetVoice = feet.length > 0 ? mk(feet) : null
     const beams = [
       ...Beam.generateBeams(hands.map((it) => it.note), {
         groups,
@@ -333,15 +355,15 @@ function render(): void {
         maintain_stem_directions: true,
       }),
     ]
-    const minW = Math.ceil(
-      new Formatter()
-        .joinVoices([handsVoice, feetVoice])
-        .preCalculateMinTotalWidth([handsVoice, feetVoice]),
-    )
-    return { bar, hands, feet, handsVoice, feetVoice, beams, minW }
+    const noteCount = hands.filter((it) => it.cell !== null).length
+    return { bar, hands, feet, handsVoice, feetVoice, beams, noteCount }
   })
 
-  const { rows, height, contentW } = layoutBars(built, lineWidth)
+  // pxPerNote shrinks so the densest bar fits the width — identical to ScoreView.
+  const maxNotes = Math.max(1, ...built.map((b) => b.noteCount))
+  const usable = lineWidth - LEFT * 2 - CLEF_W
+  const pxPerNote = Math.max(MIN_PX_PER_NOTE, Math.min(PX_PER_NOTE, usable / maxNotes))
+  const { rows, height, contentW } = layoutBars(built, lineWidth, pxPerNote)
   const renderer = new Renderer(host, Renderer.Backends.SVG)
   renderer.resize(Math.max(lineWidth, contentW), height)
   const ctx = renderer.getContext()
@@ -358,11 +380,12 @@ function render(): void {
     }
     stave.setContext(ctx).draw()
 
+    const voices = b.feetVoice ? [b.handsVoice, b.feetVoice] : [b.handsVoice]
     new Formatter()
-      .joinVoices([b.handsVoice, b.feetVoice])
-      .format([b.handsVoice, b.feetVoice], width - (firstInRow ? CLEF_W : 0) - INNER_PAD)
+      .joinVoices(voices)
+      .format(voices, width - (firstInRow ? CLEF_W : 0) - INNER_PAD)
     b.handsVoice.draw(ctx, stave)
-    b.feetVoice.draw(ctx, stave)
+    b.feetVoice?.draw(ctx, stave)
     b.beams.forEach((bm) => bm.setContext(ctx).draw())
 
     // Accents (>) and sticking (R/L) drawn manually on two uniform lines above the
@@ -379,6 +402,47 @@ function render(): void {
       ctx.setFont('Georgia, serif', 13, '')
       for (const it of played) {
         if (it.hand) ctx.fillText(it.hand, it.note.getAbsoluteX() - 3, stickY)
+      }
+
+      // Block brackets (Patterns 2.0): the same grouping bracket as the snare
+      // score, sitting above the sticking line. `played` is in onset order, so a
+      // block's notes are contiguous. Drawn with filled rects (a stroked path is
+      // force-filled by the notation's `path { fill }` CSS). Sits well above the
+      // sticking line, which (unlike the snare score) is over the staff here.
+      const bracketY = topY - 50
+      const HEAD_HALF = 6
+      const HOOK = 6
+      const TH = 1.3
+      const RIGHT_EXT = 11
+      ctx.setFont('Georgia, serif', 10, 'normal')
+      let gi = 0
+      while (gi < played.length) {
+        const blk = played[gi].block ?? -1
+        const label = played[gi].blockLabel ?? ''
+        if (blk < 0 || label === '') {
+          gi += 1
+          continue
+        }
+        let j = gi
+        while (j + 1 < played.length && played[j + 1].block === blk) j += 1
+        const x0 = played[gi].note.getAbsoluteX() + HEAD_HALF
+        const x1 = played[j].note.getAbsoluteX() + HEAD_HALF + RIGHT_EXT
+        ctx.fillRect(x0, bracketY, x1 - x0, TH)
+        ctx.fillRect(x0, bracketY, TH, HOOK)
+        ctx.fillRect(x1 - TH, bracketY, TH, HOOK)
+        // Shrink an over-long label to fit its own bracket span, so adjacent
+        // groups' labels never overlap.
+        let fs = 10
+        ctx.setFont('Georgia, serif', fs, 'normal')
+        let w = ctx.measureText(label).width
+        const span = x1 - x0 - 2
+        if (w > span) {
+          fs = Math.max(6.5, (fs * span) / w)
+          ctx.setFont('Georgia, serif', fs, 'normal')
+          w = ctx.measureText(label).width
+        }
+        ctx.fillText(label, (x0 + x1) / 2 - w / 2, bracketY - 4)
+        gi = j + 1
       }
     }
 

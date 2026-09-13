@@ -75,6 +75,10 @@ export interface Hit {
   accent: boolean
   ghost: boolean
   articulation: string
+  /** Vocabulary-block instance (Patterns 2.0), for a labelled bracket. -1 = none. */
+  block?: number
+  /** Short label for the block bracket, e.g. 'Para', '5'. */
+  block_label?: string
 }
 
 export interface GrooveBar {

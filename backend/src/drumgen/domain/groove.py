@@ -25,6 +25,11 @@ class Hit(BaseModel):
     accent: bool = False
     ghost: bool = False
     articulation: Articulation = Articulation.NORMAL
+    block: int = -1
+    """Vocabulary-block instance this hit came from (Patterns 2.0), for the
+    labelled bracket over the group. -1 = not part of a tagged block."""
+    block_label: str = ""
+    """Short label for the block bracket, e.g. 'Para', '5'."""
 
 
 class GrooveBar(BaseModel):
