@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import imageCompression from 'browser-image-compression'
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
-import AvatarCropper from '../components/AvatarCropper.vue'
 import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
 import SocialGlyph from '../components/SocialGlyph.vue'
 import { ApiError } from '../lib/api'
 import { normalizeUrl, socialIcon } from '../lib/social'
+
+// The cropper (+ its cropping/compression deps) only loads once the user picks a
+// photo — most account visits never crop.
+const AvatarCropper = defineAsyncComponent(() => import('../components/AvatarCropper.vue'))
 import { useAuth } from '../lib/auth'
 import { setPendingGroove, setPendingPhrase } from '../lib/loadedPattern'
 import { listLiked, unlikePattern, updateProfile, uploadAvatar } from '../lib/patterns'
@@ -24,16 +26,27 @@ const { user, setUser } = useAuth()
 // --- Profile editor ---------------------------------------------------------
 const displayName = ref(user.value?.display_name ?? '')
 const bio = ref(user.value?.bio ?? '')
-// Editable social links (one input per entry). Backend normalises + drops blanks.
-const links = ref<string[]>([...(user.value?.social_links ?? [])])
+// Editable social links. Each row carries a STABLE id so v-for keys survive
+// removal/reorder (index keys mis-associate inputs). Backend normalises + drops blanks.
+interface LinkRow {
+  id: number
+  url: string
+}
+let nextLinkId = 0
+const toRows = (urls: string[]): LinkRow[] => urls.map((url) => ({ id: nextLinkId++, url }))
+const links = ref<LinkRow[]>(toRows(user.value?.social_links ?? []))
 const saving = ref(false)
 const saveMsg = ref<'' | 'saved' | 'error'>('')
 
 function addLink(): void {
-  links.value.push('')
+  links.value.push({ id: nextLinkId++, url: '' })
 }
 function removeLink(i: number): void {
   links.value.splice(i, 1)
+}
+// A non-empty entry that isn't a usable URL — shown as an inline hint.
+function linkInvalid(url: string): boolean {
+  return url.trim() !== '' && normalizeUrl(url) === null
 }
 // Saved links (from the account) that resolve to an icon — shown under the avatar.
 const savedLinks = computed(() =>
@@ -45,6 +58,7 @@ const savedLinks = computed(() =>
 )
 const avatarBusy = ref(false)
 const avatarError = ref('')
+const avatarOk = ref('') // announced confirmation after an avatar change
 const fileInput = ref<HTMLInputElement | null>(null)
 // Object URL of the picked-and-compressed image, shown in the crop modal.
 const cropSrc = ref<string | null>(null)
@@ -53,10 +67,14 @@ async function saveProfile(): Promise<void> {
   saving.value = true
   saveMsg.value = ''
   try {
-    const updated = await updateProfile(displayName.value.trim(), bio.value, links.value)
+    const updated = await updateProfile(
+      displayName.value.trim(),
+      bio.value,
+      links.value.map((r) => r.url),
+    )
     setUser(updated)
     // Reflect the normalised list (https:// added, blanks dropped) back into the editor.
-    links.value = [...updated.social_links]
+    links.value = toRows(updated.social_links)
     saveMsg.value = 'saved'
   } catch {
     saveMsg.value = 'error'
@@ -71,10 +89,12 @@ async function onAvatarPicked(event: Event): Promise<void> {
   input.value = '' // let the same file be re-picked later
   if (!file) return
   avatarError.value = ''
+  avatarOk.value = ''
   avatarBusy.value = true
   try {
     // Compress before cropping: keeps big phone photos under ~1MB and makes the
-    // cropper snappy. The backend downsamples the crop again to a 256px webp.
+    // cropper snappy. The lib is imported on demand so it isn't in the base load.
+    const { default: imageCompression } = await import('browser-image-compression')
     const compressed = await imageCompression(file, {
       maxSizeMB: 1,
       maxWidthOrHeight: 1600,
@@ -99,9 +119,11 @@ async function onCropConfirm(blob: Blob): Promise<void> {
   closeCrop()
   avatarBusy.value = true
   avatarError.value = ''
+  avatarOk.value = ''
   try {
     const updated = await uploadAvatar(file)
     setUser(updated)
+    avatarOk.value = 'Photo updated' // the avatar saves on its own — confirm it
   } catch (err) {
     avatarError.value =
       err instanceof ApiError && (err.status === 400 || err.status === 413)
@@ -123,6 +145,7 @@ const loadingFaves = ref(true)
 const favesError = ref('')
 
 onMounted(async () => {
+  document.title = 'My Account · Drum Pattern Generator'
   try {
     favorites.value = await listLiked()
   } catch {
@@ -177,6 +200,7 @@ function chip(fave: LikedPattern, key: string): string | null {
       <p v-if="!user" class="muted account__loading">Loading your account…</p>
 
       <section v-else class="account">
+        <h1 class="visually-hidden">My Account</h1>
         <!-- Profile editor -->
         <div class="card">
           <h2 class="card__title">Profile</h2>
@@ -201,9 +225,12 @@ function chip(fave: LikedPattern, key: string): string | null {
                 class="visually-hidden"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
+                aria-label="Upload profile photo"
+                tabindex="-1"
                 @change="onAvatarPicked"
               />
-              <p v-if="avatarError" class="profile__avatar-error">{{ avatarError }}</p>
+              <p v-if="avatarError" class="profile__avatar-error" role="alert">{{ avatarError }}</p>
+              <p v-if="avatarOk" class="profile__avatar-ok" role="status">{{ avatarOk }}</p>
               <AvatarCropper
                 v-if="cropSrc"
                 :src="cropSrc"
@@ -250,25 +277,38 @@ function chip(fave: LikedPattern, key: string): string | null {
               </div>
               <div class="field">
                 <span class="field__label">Links</span>
-                <div v-for="(_, i) in links" :key="i" class="linkrow">
-                  <span class="linkrow__icon" :class="{ 'is-empty': !socialIcon(links[i]) }">
-                    <SocialGlyph :url="links[i]" :size="18" />
-                  </span>
-                  <input
-                    v-model="links[i]"
-                    class="field__input linkrow__input"
-                    type="text"
-                    maxlength="200"
-                    placeholder="https://instagram.com/you"
-                  />
-                  <button
-                    class="linkrow__remove"
-                    type="button"
-                    aria-label="Remove link"
-                    @click="removeLink(i)"
-                  >
-                    ×
-                  </button>
+                <div v-for="(row, i) in links" :key="row.id" class="linkitem">
+                  <div class="linkrow">
+                    <span
+                      class="linkrow__icon"
+                      :class="{ 'is-empty': !socialIcon(row.url) }"
+                      aria-hidden="true"
+                    >
+                      <SocialGlyph :url="row.url" :size="18" />
+                    </span>
+                    <input
+                      v-model="row.url"
+                      class="field__input linkrow__input"
+                      :class="{ 'is-invalid': linkInvalid(row.url) }"
+                      type="text"
+                      inputmode="url"
+                      maxlength="200"
+                      :aria-label="`Social link ${i + 1} URL`"
+                      :aria-invalid="linkInvalid(row.url) || undefined"
+                      placeholder="https://instagram.com/you"
+                    />
+                    <button
+                      class="linkrow__remove"
+                      type="button"
+                      :aria-label="`Remove link ${i + 1}`"
+                      @click="removeLink(i)"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p v-if="linkInvalid(row.url)" class="linkrow__hint" role="alert">
+                    That doesn’t look like a link — use a full address, e.g. https://…
+                  </p>
                 </div>
                 <button
                   v-if="links.length < 10"
@@ -283,8 +323,12 @@ function chip(fave: LikedPattern, key: string): string | null {
                 <button class="btn-primary" type="submit" :disabled="saving">
                   {{ saving ? 'Saving…' : 'Save profile' }}
                 </button>
-                <span v-if="saveMsg === 'saved'" class="profile__ok">Saved</span>
-                <span v-else-if="saveMsg === 'error'" class="profile__err">Couldn't save</span>
+                <span class="profile__status" role="status" aria-live="polite">
+                  <span v-if="saveMsg === 'saved'" class="profile__ok">✓ Saved</span>
+                  <span v-else-if="saveMsg === 'error'" class="profile__err"
+                    >Couldn’t save — try again</span
+                  >
+                </span>
               </div>
             </form>
           </div>
@@ -402,7 +446,7 @@ function chip(fave: LikedPattern, key: string): string | null {
   border-radius: 999px;
   overflow: hidden;
   background: linear-gradient(160deg, var(--amber), var(--amber-dim));
-  color: #1a1206;
+  color: var(--on-amber);
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 2rem;
@@ -444,17 +488,26 @@ function chip(fave: LikedPattern, key: string): string | null {
   font-size: 0.72rem;
 }
 
+.profile__avatar-ok {
+  margin: 0;
+  max-width: 120px;
+  text-align: center;
+  color: var(--amber-bright);
+  font-size: 0.72rem;
+}
+
 /* Social icons under the avatar (saved links). */
 .socials {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
+  gap: 8px 12px;
   margin-top: 12px;
-  max-width: 140px;
+  max-width: 100%;
 }
 
 .socials__link {
+  display: inline-flex;
   color: var(--text-dim);
   line-height: 0;
   transition: color 0.15s ease;
@@ -472,11 +525,26 @@ function chip(fave: LikedPattern, key: string): string | null {
 }
 
 /* Links editor: one row per link — detected icon + URL input + remove. */
+.linkitem {
+  margin-bottom: 10px;
+}
+
 .linkrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+}
+
+.linkrow__input.is-invalid {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.linkrow__hint {
+  /* Indent past the 20px icon + 8px gap so it aligns under the input. */
+  margin: 4px 0 0 28px;
+  color: var(--danger);
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .linkrow__icon {
@@ -540,6 +608,11 @@ function chip(fave: LikedPattern, key: string): string | null {
   gap: 12px;
 }
 
+.profile__status {
+  /* Reserve room so the row height is stable whether or not a message shows. */
+  min-height: 1.2em;
+}
+
 .profile__ok {
   color: var(--amber-bright);
   font-size: 0.85rem;
@@ -555,7 +628,7 @@ function chip(fave: LikedPattern, key: string): string | null {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 14px;
 }
 
@@ -566,7 +639,7 @@ function chip(fave: LikedPattern, key: string): string | null {
   padding: 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--edge);
-  background: linear-gradient(180deg, #171310, var(--chassis));
+  background: linear-gradient(180deg, var(--field-ink), var(--chassis));
 }
 
 .fave__screen {
@@ -630,5 +703,25 @@ function chip(fave: LikedPattern, key: string): string | null {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+/* Touch devices: grow the small controls to a comfortable ≥44px target. */
+@media (pointer: coarse) {
+  .profile__upload {
+    min-height: 44px;
+  }
+
+  .linkrow__remove {
+    width: 44px;
+    height: 44px;
+  }
+
+  .linkrow__add {
+    min-height: 44px;
+  }
+
+  .socials__link {
+    padding: 10px;
+  }
 }
 </style>

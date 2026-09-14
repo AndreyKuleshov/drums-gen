@@ -24,6 +24,10 @@
   --amber-bright: #ffb45f;
   --amber-dim: #b06a1f;
   --amber-glow: rgba(255, 157, 60, 0.35);
+  --on-amber: #1a1206; /* dark ink legible on an amber fill */
+
+  /* Recessed field surface (a hair darker than the chassis) */
+  --field-ink: #171310;
 
   /* Text (warm off-white + hue-tinted dims, no flat gray) */
   --text: #f1e9db;
