@@ -30,10 +30,6 @@ from drumgen.mailer.templates import (
 # A new password may not match any of the last N passwords.
 _PASSWORD_HISTORY_DEPTH = 3
 
-# TEMPORARY: single QA email that skips email verification at registration.
-# Revert together with the bypass in register() right after seeding the prod user.
-_QA_AUTOVERIFY_EMAIL = "qa.tester@drumgen.dev"
-
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -90,13 +86,6 @@ async def register(
     session.add(user)
     await session.flush()
     await _set_password(session, user, password)
-    # TEMPORARY (revert immediately after): auto-verify a single QA account so a
-    # verified prod test user can be seeded without the email round-trip, since
-    # the prod DB isn't reachable to flip the flag directly.
-    if email == _QA_AUTOVERIFY_EMAIL:
-        user.email_verified_at = _now()
-        await session.commit()
-        return
     await _issue_email_token(session, settings, user, purpose="verify")
 
 
