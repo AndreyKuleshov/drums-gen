@@ -344,11 +344,12 @@ def _kit_hand_hit(
     lead_order: list[Surface] = _LEAD_ORDER,
     is_ghost: bool = False,
 ) -> Hit:
-    """One hands-voice hit for the kit orchestration: an accent rides the snare/tom
-    lead, a non-accent goes to the hi-hat (right hand) or snare (left). Ghost notes
-    exist ONLY on the snare AND only for strokes flagged `is_ghost` (the diddles) —
-    a plain snare tap or any hi-hat note is not a ghost. `block`/`block_label` carry
-    the vocabulary-block tag for the labelled bracket over the group."""
+    """One hands-voice hit for the kit orchestration. Voiced by LEVEL, not by hand,
+    so a hi-hat is always present regardless of which hand leads:
+      * accent -> the snare/tom lead (rides across the kit),
+      * ghost (a diddle) -> the snare, soft,
+      * plain tap -> the hi-hat, keeping time.
+    `block`/`block_label` carry the vocabulary-block tag for the labelled bracket."""
     if accent:
         surface = _lead_surface(onset, beat_len, lead_start, bar, lead_order)
         return Hit(
@@ -360,13 +361,13 @@ def _kit_hand_hit(
             block=block,
             block_label=block_label,
         )
-    surface = Surface.HIHAT if hand is Hand.R else Surface.SNARE
+    surface = Surface.SNARE if is_ghost else Surface.HIHAT
     return Hit(
         onset=onset,
         duration=dur,
         surface=surface,
         hand=hand,
-        ghost=is_ghost and surface is Surface.SNARE,
+        ghost=is_ghost,
         block=block,
         block_label=block_label,
     )
