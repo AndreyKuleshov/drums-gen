@@ -350,6 +350,9 @@ function chip(fave: LikedPattern, key: string): string | null {
 }
 
 .profile__upload {
+  /* Pinned width (fits the longest label) + centred text so swapping to
+     "Working…" doesn't resize the button and nudge the column. */
+  min-width: 112px;
   padding: 6px 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--edge);
@@ -358,6 +361,7 @@ function chip(fave: LikedPattern, key: string): string | null {
   font-family: var(--font-mono);
   font-size: 0.64rem;
   letter-spacing: 0.08em;
+  text-align: center;
   text-transform: uppercase;
   cursor: pointer;
 }
