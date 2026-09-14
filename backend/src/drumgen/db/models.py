@@ -29,6 +29,10 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(80))
     bio: Mapped[str] = mapped_column(Text, default="")
     avatar_path: Mapped[str | None] = mapped_column(String(255))
+    # Social profile links (Instagram, YouTube, …), shown as brand icons.
+    social_links: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

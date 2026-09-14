@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import imageCompression from 'browser-image-compression'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
 import AvatarCropper from '../components/AvatarCropper.vue'
 import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
+import SocialGlyph from '../components/SocialGlyph.vue'
 import { ApiError } from '../lib/api'
+import { normalizeUrl, socialIcon } from '../lib/social'
 import { useAuth } from '../lib/auth'
 import { setPendingGroove, setPendingPhrase } from '../lib/loadedPattern'
 import { listLiked, unlikePattern, updateProfile, uploadAvatar } from '../lib/patterns'
@@ -22,8 +24,25 @@ const { user, setUser } = useAuth()
 // --- Profile editor ---------------------------------------------------------
 const displayName = ref(user.value?.display_name ?? '')
 const bio = ref(user.value?.bio ?? '')
+// Editable social links (one input per entry). Backend normalises + drops blanks.
+const links = ref<string[]>([...(user.value?.social_links ?? [])])
 const saving = ref(false)
 const saveMsg = ref<'' | 'saved' | 'error'>('')
+
+function addLink(): void {
+  links.value.push('')
+}
+function removeLink(i: number): void {
+  links.value.splice(i, 1)
+}
+// Saved links (from the account) that resolve to an icon — shown under the avatar.
+const savedLinks = computed(() =>
+  (user.value?.social_links ?? [])
+    .map((url) => ({ url, href: normalizeUrl(url), icon: socialIcon(url) }))
+    .filter((s): s is { url: string; href: string; icon: NonNullable<typeof s.icon> } =>
+      Boolean(s.href && s.icon),
+    ),
+)
 const avatarBusy = ref(false)
 const avatarError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -34,8 +53,10 @@ async function saveProfile(): Promise<void> {
   saving.value = true
   saveMsg.value = ''
   try {
-    const updated = await updateProfile(displayName.value.trim(), bio.value)
+    const updated = await updateProfile(displayName.value.trim(), bio.value, links.value)
     setUser(updated)
+    // Reflect the normalised list (https:// added, blanks dropped) back into the editor.
+    links.value = [...updated.social_links]
     saveMsg.value = 'saved'
   } catch {
     saveMsg.value = 'error'
@@ -189,6 +210,20 @@ function chip(fave: LikedPattern, key: string): string | null {
                 @confirm="onCropConfirm"
                 @cancel="closeCrop"
               />
+              <div v-if="savedLinks.length" class="socials">
+                <a
+                  v-for="s in savedLinks"
+                  :key="s.url"
+                  class="socials__link"
+                  :href="s.href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :title="s.icon.label"
+                  :aria-label="s.icon.label"
+                >
+                  <SocialGlyph :url="s.url" :size="20" />
+                </a>
+              </div>
             </div>
 
             <form class="profile__fields" @submit.prevent="saveProfile">
@@ -212,6 +247,37 @@ function chip(fave: LikedPattern, key: string): string | null {
                   maxlength="2000"
                   placeholder="Tell other drummers a little about yourself."
                 />
+              </div>
+              <div class="field">
+                <span class="field__label">Links</span>
+                <div v-for="(_, i) in links" :key="i" class="linkrow">
+                  <span class="linkrow__icon" :class="{ 'is-empty': !socialIcon(links[i]) }">
+                    <SocialGlyph :url="links[i]" :size="18" />
+                  </span>
+                  <input
+                    v-model="links[i]"
+                    class="field__input linkrow__input"
+                    type="text"
+                    maxlength="200"
+                    placeholder="https://instagram.com/you"
+                  />
+                  <button
+                    class="linkrow__remove"
+                    type="button"
+                    aria-label="Remove link"
+                    @click="removeLink(i)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <button
+                  v-if="links.length < 10"
+                  class="linkrow__add"
+                  type="button"
+                  @click="addLink"
+                >
+                  + Add link
+                </button>
               </div>
               <div class="profile__actions">
                 <button class="btn-primary" type="submit" :disabled="saving">
@@ -378,11 +444,94 @@ function chip(fave: LikedPattern, key: string): string | null {
   font-size: 0.72rem;
 }
 
+/* Social icons under the avatar (saved links). */
+.socials {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  max-width: 140px;
+}
+
+.socials__link {
+  color: var(--text-dim);
+  line-height: 0;
+  transition: color 0.15s ease;
+}
+
+.socials__link:hover {
+  color: var(--amber-bright);
+}
+
 .profile__fields {
   flex: 1 1 260px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Links editor: one row per link — detected icon + URL input + remove. */
+.linkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.linkrow__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-dim);
+}
+
+.linkrow__icon.is-empty {
+  opacity: 0.3;
+}
+
+.linkrow__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.linkrow__remove {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.linkrow__remove:hover {
+  color: var(--danger);
+}
+
+.linkrow__add {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: 1px dashed var(--edge);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.linkrow__add:hover {
+  color: var(--amber-bright);
+  border-color: var(--amber-dim);
 }
 
 .profile__actions {

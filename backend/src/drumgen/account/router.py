@@ -16,6 +16,7 @@ router = APIRouter(prefix="/account", tags=["account"])
 async def update_profile(body: ProfileIn, user: CurrentUser, session: SessionDep) -> UserOut:
     user.display_name = body.display_name
     user.bio = body.bio
+    user.social_links = body.social_links
     await session.commit()
     return UserOut.from_user(user)
 
