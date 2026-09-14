@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import imageCompression from 'browser-image-compression'
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
+import AvatarCropper from '../components/AvatarCropper.vue'
 import GrooveScore from '../components/GrooveScore.vue'
 import ScoreView from '../components/ScoreView.vue'
 import { ApiError } from '../lib/api'
@@ -25,6 +27,8 @@ const saveMsg = ref<'' | 'saved' | 'error'>('')
 const avatarBusy = ref(false)
 const avatarError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+// Object URL of the picked-and-compressed image, shown in the crop modal.
+const cropSrc = ref<string | null>(null)
 
 async function saveProfile(): Promise<void> {
   saving.value = true
@@ -43,7 +47,35 @@ async function saveProfile(): Promise<void> {
 async function onAvatarPicked(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
+  input.value = '' // let the same file be re-picked later
   if (!file) return
+  avatarError.value = ''
+  avatarBusy.value = true
+  try {
+    // Compress before cropping: keeps big phone photos under ~1MB and makes the
+    // cropper snappy. The backend downsamples the crop again to a 256px webp.
+    const compressed = await imageCompression(file, {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+    })
+    closeCrop()
+    cropSrc.value = URL.createObjectURL(compressed)
+  } catch {
+    avatarError.value = 'Couldn’t read that image. Try another one.'
+  } finally {
+    avatarBusy.value = false
+  }
+}
+
+function closeCrop(): void {
+  if (cropSrc.value) URL.revokeObjectURL(cropSrc.value)
+  cropSrc.value = null
+}
+
+async function onCropConfirm(blob: Blob): Promise<void> {
+  const file = new File([blob], 'avatar.webp', { type: 'image/webp' })
+  closeCrop()
   avatarBusy.value = true
   avatarError.value = ''
   try {
@@ -56,7 +88,6 @@ async function onAvatarPicked(event: Event): Promise<void> {
         : 'Upload failed. Please try again.'
   } finally {
     avatarBusy.value = false
-    input.value = ''
   }
 }
 
@@ -142,7 +173,7 @@ function chip(fave: LikedPattern, key: string): string | null {
                 :disabled="avatarBusy"
                 @click="fileInput?.click()"
               >
-                {{ avatarBusy ? 'Uploading…' : 'Change photo' }}
+                {{ avatarBusy ? 'Working…' : 'Change photo' }}
               </button>
               <input
                 ref="fileInput"
@@ -152,6 +183,12 @@ function chip(fave: LikedPattern, key: string): string | null {
                 @change="onAvatarPicked"
               />
               <p v-if="avatarError" class="profile__avatar-error">{{ avatarError }}</p>
+              <AvatarCropper
+                v-if="cropSrc"
+                :src="cropSrc"
+                @confirm="onCropConfirm"
+                @cancel="closeCrop"
+              />
             </div>
 
             <form class="profile__fields" @submit.prevent="saveProfile">

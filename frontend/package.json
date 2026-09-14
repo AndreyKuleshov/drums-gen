@@ -9,9 +9,11 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "browser-image-compression": "^2.0.2",
     "tone": "^14.7.77",
     "vexflow": "^4.2.3",
     "vue": "^3.4.0",
+    "vue-advanced-cropper": "^2.8.9",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
