@@ -435,7 +435,10 @@ function chip(fave: LikedPattern, key: string): string | null {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  /* Pinned width so a long list of social links wraps to more rows instead of
+     stretching the column and shoving the fields sideways. */
   flex: none;
+  width: 128px;
 }
 
 .profile__avatar {
