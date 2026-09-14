@@ -30,10 +30,14 @@ export function unlikePattern(id: string): Promise<void> {
   return apiFetch(`/patterns/liked/${id}`, { method: 'DELETE' })
 }
 
-export function updateProfile(displayName: string, bio: string): Promise<User> {
+export function updateProfile(
+  displayName: string,
+  bio: string,
+  socialLinks: string[] = [],
+): Promise<User> {
   return apiFetch<User>('/account', {
     method: 'PATCH',
-    body: JSON.stringify({ display_name: displayName, bio }),
+    body: JSON.stringify({ display_name: displayName, bio, social_links: socialLinks }),
   })
 }
 

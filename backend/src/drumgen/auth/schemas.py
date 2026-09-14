@@ -39,6 +39,7 @@ class UserOut(BaseModel):
     display_name: str
     bio: str
     avatar_url: str | None
+    social_links: list[str]
     is_verified: bool
 
     @classmethod
@@ -50,5 +51,6 @@ class UserOut(BaseModel):
             display_name=user.display_name,
             bio=user.bio,
             avatar_url=avatar_url,
+            social_links=user.social_links,
             is_verified=user.is_verified,
         )

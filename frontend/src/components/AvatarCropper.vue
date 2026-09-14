@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { CircleStencil, Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 
@@ -8,6 +8,20 @@ const emit = defineEmits<{
   (e: 'confirm', blob: Blob): void
   (e: 'cancel'): void
 }>()
+
+// Focus management: trap Tab inside the dialog while open, then restore focus
+// to whatever opened it (the "Change photo" button) on close.
+const dialog = ref<HTMLElement | null>(null)
+let opener: HTMLElement | null = null
+
+function focusable(): HTMLElement[] {
+  if (!dialog.value) return []
+  return Array.from(
+    dialog.value.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
 
 // The library exposes these instance methods via defineExpose; we only need two.
 interface CropperApi {
@@ -55,16 +69,48 @@ async function confirm(): Promise<void> {
 }
 
 function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape') emit('cancel')
+  if (e.key === 'Escape') {
+    emit('cancel')
+    return
+  }
+  if (e.key !== 'Tab') return
+  const items = focusable()
+  if (items.length === 0) return
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  // Wrap around the ends, and pull focus back in if it has escaped the dialog.
+  if (e.shiftKey && (active === first || !dialog.value?.contains(active))) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && (active === last || !dialog.value?.contains(active))) {
+    e.preventDefault()
+    first.focus()
+  }
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+onMounted(async () => {
+  opener = document.activeElement as HTMLElement | null
+  window.addEventListener('keydown', onKey)
+  await nextTick()
+  focusable()[0]?.focus()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  opener?.focus()
+})
 </script>
 
 <template>
   <Teleport to="body">
     <div class="cropmodal__backdrop" @click="emit('cancel')" />
-    <div class="cropmodal" role="dialog" aria-modal="true" aria-label="Crop your photo">
+    <div
+      ref="dialog"
+      class="cropmodal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Crop your photo"
+    >
       <h3 class="cropmodal__title">Position your photo</h3>
       <div class="cropmodal__stage">
         <Cropper
@@ -132,13 +178,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .cropmodal__stage {
   border-radius: var(--r-md);
   overflow: hidden;
-  background: #0d0b09;
+  background: var(--field-ink);
   border: 1px solid var(--edge);
 }
 
 .cropmodal__cropper {
   height: min(60vh, 340px);
-  background: #0d0b09;
+  background: var(--field-ink);
 }
 
 .cropmodal__zoom {
@@ -174,7 +220,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .cropmodal__actions {
@@ -205,7 +251,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-radius: var(--r-md);
   border: 1px solid var(--amber-dim);
   background: linear-gradient(180deg, var(--amber), var(--amber-dim));
-  color: #1a1206;
+  color: var(--on-amber);
   font-family: var(--font-ui);
   font-weight: 600;
   font-size: 0.86rem;

@@ -4,6 +4,7 @@ export interface User {
   display_name: string
   bio: string
   avatar_url: string | null
+  social_links: string[]
   is_verified: boolean
 }
 

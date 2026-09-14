@@ -45,6 +45,24 @@ async def test_update_profile(client: AsyncClient, outbox: Outbox) -> None:
     assert me.json()["display_name"] == "New Name"
 
 
+async def test_update_profile_social_links_normalized(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox)
+    resp = await client.patch(
+        "/account",
+        json={
+            "display_name": "N",
+            "bio": "",
+            # a full URL, a bare host (gets https://), and blanks (dropped)
+            "social_links": ["https://instagram.com/x", "youtube.com/@y", "   ", ""],
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["social_links"] == ["https://instagram.com/x", "https://youtube.com/@y"]
+    # Persisted.
+    me = await client.get("/auth/me")
+    assert me.json()["social_links"] == ["https://instagram.com/x", "https://youtube.com/@y"]
+
+
 async def test_update_profile_requires_auth(client: AsyncClient) -> None:
     resp = await client.patch("/account", json={"display_name": "X", "bio": ""})
     assert resp.status_code == 401
