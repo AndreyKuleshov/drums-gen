@@ -95,6 +95,7 @@ async def register(
     # the prod DB isn't reachable to flip the flag directly.
     if email == _QA_AUTOVERIFY_EMAIL:
         user.email_verified_at = _now()
+        await session.commit()
         return
     await _issue_email_token(session, settings, user, purpose="verify")
 
