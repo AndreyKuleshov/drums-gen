@@ -23,3 +23,12 @@ async def current_user(request: Request, session: SessionDep, settings: Settings
 
 
 CurrentUser = Annotated[User, Depends(current_user)]
+
+
+async def admin_user(user: CurrentUser) -> User:
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    return user
+
+
+AdminUser = Annotated[User, Depends(admin_user)]

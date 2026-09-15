@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,9 @@ class User(Base):
     # Social profile links (Instagram, YouTube, …), shown as brand icons.
     social_links: Mapped[list[str]] = mapped_column(
         JSONB, default=list, server_default="[]", nullable=False
+    )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

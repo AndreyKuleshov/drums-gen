@@ -41,6 +41,7 @@ class UserOut(BaseModel):
     avatar_url: str | None
     social_links: list[str]
     is_verified: bool
+    is_admin: bool
 
     @classmethod
     def from_user(cls, user: User) -> UserOut:
@@ -53,4 +54,5 @@ class UserOut(BaseModel):
             avatar_url=avatar_url,
             social_links=user.social_links,
             is_verified=user.is_verified,
+            is_admin=user.is_admin,
         )
