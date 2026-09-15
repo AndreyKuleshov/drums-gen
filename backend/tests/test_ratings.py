@@ -29,3 +29,15 @@ async def test_userout_exposes_is_admin(client: AsyncClient, outbox: Outbox) -> 
     me = await client.get("/auth/me")
     assert me.status_code == 200
     assert me.json()["is_admin"] is False
+
+
+def test_content_hash_is_stable_and_order_independent() -> None:
+    from drumgen.ratings.service import content_hash
+
+    a = {"tempo_bpm": 120, "bars": [{"strokes": [1, 2]}], "subdivision": "1/16"}
+    b = {"subdivision": "1/16", "bars": [{"strokes": [1, 2]}], "tempo_bpm": 120}
+    c = {"tempo_bpm": 121, "bars": [{"strokes": [1, 2]}], "subdivision": "1/16"}
+    ha, hb, hc = content_hash(a), content_hash(b), content_hash(c)
+    assert ha == hb  # key order does not change the hash
+    assert ha != hc  # different content → different hash
+    assert len(ha) == 64
