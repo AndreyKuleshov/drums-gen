@@ -17,6 +17,7 @@ from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
 from drumgen.groove_generator import GrooveRequest, generate_groove
 from drumgen.patterns.router import router as patterns_router
+from drumgen.ratings.router import router as ratings_router
 from drumgen.sticking_generator import StickingRequest, generate_sticking, revoice_kit
 
 
@@ -41,6 +42,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(account_router)
 app.include_router(patterns_router)
+app.include_router(ratings_router)
 
 # Serve uploaded avatars from the media volume. The directory is created up front
 # so the mount doesn't fail on a fresh deploy with an empty volume.

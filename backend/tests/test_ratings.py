@@ -60,3 +60,65 @@ async def test_pattern_ratings_table_exists(client: AsyncClient) -> None:
         assert count == 0
     finally:
         await agen.aclose()
+
+
+_PATTERN: dict[str, object] = {
+    "time_sig": {"num": 4, "den": 4},
+    "tempo_bpm": 120,
+    "subdivision": "1/16",
+    "bars": [],
+}
+_PARAMS: dict[str, object] = {
+    "time_sig": {"num": 4, "den": 4},
+    "num_bars": 1,
+    "subdivision": "1/16",
+    "tempo_bpm": 120,
+    "voicing": "snare",
+    "singles": True,
+    "odd": False,
+    "paradiddle": False,
+}
+
+
+def _rate_body(rating: int, **over: object) -> dict[str, object]:
+    body: dict[str, object] = {
+        "rating": rating,
+        "tags": [],
+        "note": None,
+        "kind": "exercise",
+        "pattern": _PATTERN,
+        "params": _PARAMS,
+        "seed": 7,
+    }
+    body.update(over)
+    return body
+
+
+async def test_rate_requires_auth(client: AsyncClient) -> None:
+    resp = await client.post("/patterns2/rate", json=_rate_body(1))
+    assert resp.status_code == 401
+
+
+async def test_rate_upsert_then_change_then_remove(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox, "r1@example.com")
+
+    up = await client.post("/patterns2/rate", json=_rate_body(-1, tags=["too_busy", "unmusical"]))
+    assert up.status_code == 200
+    assert up.json()["rating"] == -1
+    assert set(up.json()["tags"]) == {"too_busy", "unmusical"}
+
+    # Same content → upsert (no duplicate row), flip to like.
+    up2 = await client.post("/patterns2/rate", json=_rate_body(1, tags=["groovy"]))
+    assert up2.status_code == 200
+    assert up2.json()["rating"] == 1
+    assert up2.json()["id"] == up.json()["id"]  # same row
+
+    # rating 0 removes it.
+    rm = await client.post("/patterns2/rate", json=_rate_body(0))
+    assert rm.status_code == 204
+
+
+async def test_rate_rejects_unknown_tag(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox, "r2@example.com")
+    resp = await client.post("/patterns2/rate", json=_rate_body(-1, tags=["nonsense"]))
+    assert resp.status_code == 422
