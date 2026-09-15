@@ -464,6 +464,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           :disabled="!canRevoice || revoicing"
           :aria-pressed="revoiced"
           data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+          data-tip-align="left"
           @click="toggleRevoice"
         >
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
