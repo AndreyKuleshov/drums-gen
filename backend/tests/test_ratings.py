@@ -122,3 +122,56 @@ async def test_rate_rejects_unknown_tag(client: AsyncClient, outbox: Outbox) -> 
     await _signed_in(client, outbox, "r2@example.com")
     resp = await client.post("/patterns2/rate", json=_rate_body(-1, tags=["nonsense"]))
     assert resp.status_code == 422
+
+
+async def _make_admin(client: AsyncClient, email: str) -> None:
+    # Flip is_admin directly in the test DB session used by the app.
+    from sqlalchemy import update
+
+    from drumgen.api import app
+    from drumgen.db.engine import get_session
+    from drumgen.db.models import User
+
+    override = app.dependency_overrides[get_session]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        await session.execute(update(User).where(User.email == email).values(is_admin=True))
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+
+async def test_admin_ratings_forbidden_for_plain_user(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox, "plain2@example.com")
+    assert (await client.get("/admin/ratings")).status_code == 403
+
+
+async def test_admin_ratings_list_summary_and_moderation(
+    client: AsyncClient, outbox: Outbox
+) -> None:
+    await _signed_in(client, outbox, "boss@example.com")
+    await _make_admin(client, "boss@example.com")
+
+    # Seed two ratings (distinct content → distinct rows).
+    await client.post("/patterns2/rate", json=_rate_body(1, tags=["groovy"]))
+    other = {**_PATTERN, "tempo_bpm": 90}
+    await client.post("/patterns2/rate", json=_rate_body(-1, tags=["too_busy"], pattern=other))
+
+    page = await client.get("/admin/ratings")
+    assert page.status_code == 200
+    data = page.json()
+    assert data["total"] == 2
+    assert data["summary"]["likes"] == 1
+    assert data["summary"]["dislikes"] == 1
+    assert data["summary"]["top_dislike_tags"][0]["tag"] == "too_busy"
+    assert data["items"][0]["rater_email"] == "boss@example.com"
+
+    rid = data["items"][0]["id"]
+    mod = await client.patch(f"/admin/ratings/{rid}", json={"moderated_out": True})
+    assert mod.status_code == 200
+    assert mod.json()["moderated_out"] is True
+
+    # Default list excludes moderated rows; include_moderated shows them.
+    assert (await client.get("/admin/ratings")).json()["total"] == 1
+    assert (await client.get("/admin/ratings?include_moderated=true")).json()["total"] == 2

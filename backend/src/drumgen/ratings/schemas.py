@@ -37,3 +37,40 @@ class RatingOut(BaseModel):
     tags: list[str]
     note: str | None
     created_at: datetime
+
+
+class AdminRatingOut(BaseModel):
+    id: uuid.UUID
+    rating: int
+    tags: list[str]
+    note: str | None
+    kind: str
+    pattern: dict[str, Any]  # full Phrase/Groove — the admin preview modal renders + plays it
+    params: dict[str, Any]
+    generator_version: str
+    seed: int | None
+    rater_email: str
+    created_at: datetime
+    moderated_out: bool
+
+
+class TagCount(BaseModel):
+    tag: str
+    count: int
+
+
+class RatingSummary(BaseModel):
+    total: int
+    likes: int
+    dislikes: int
+    top_dislike_tags: list[TagCount]
+
+
+class AdminRatingsPage(BaseModel):
+    items: list[AdminRatingOut]
+    total: int
+    summary: RatingSummary
+
+
+class ModerateIn(BaseModel):
+    moderated_out: bool
