@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import AuthNav from '../components/AuthNav.vue'
 import GrooveScore from '../components/GrooveScore.vue'
 import LikeButton from '../components/LikeButton.vue'
+import RateControl from '../components/RateControl.vue'
 import ScoreView from '../components/ScoreView.vue'
 import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
@@ -154,6 +155,21 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
   bars: bars.value,
   tempo: tempo.value,
+}))
+
+const ratingKind = computed<'exercise' | 'pattern'>(() =>
+  displayGroove.value !== null ? 'pattern' : 'exercise',
+)
+const ratingParams = computed<Record<string, unknown>>(() => ({
+  time_sig: { num: 4, den: 4 },
+  num_bars: bars.value,
+  subdivision: subdivision.value === 'mixed' ? '1/16' : subdivision.value,
+  mixed: subdivision.value === 'mixed',
+  tempo_bpm: tempo.value,
+  singles: singles.value,
+  odd: odd.value,
+  paradiddle: paradiddle.value,
+  voicing: voicing.value,
 }))
 
 // --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
@@ -538,6 +554,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         </button>
       </div>
 
+      <RateControl
+        v-if="likePayload"
+        class="prate"
+        :pattern="likePayload"
+        :kind="ratingKind"
+        :params="ratingParams"
+        :seed="null"
+      />
+
       <TransportRack
         ref="transport"
         :can-play="canPlay"
@@ -804,6 +829,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised), var(--panel));
   box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
+}
+
+.prate {
+  margin-top: 8px;
 }
 
 .ptools__sep {
