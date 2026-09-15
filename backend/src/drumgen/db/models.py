@@ -11,7 +11,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -130,4 +140,43 @@ class LikedPattern(Base):
     meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class PatternRating(Base):
+    """A user's like/dislike of a generated pattern, plus reason tags. The full
+    pattern JSON is stored as ground truth for a training dataset; params + seed
+    + generator_version make each row reproducible. Upsert key is
+    (rater_id, content_hash); moderation is a soft-delete via `moderated_out`."""
+
+    __tablename__ = "pattern_ratings"
+    __table_args__ = (UniqueConstraint("rater_id", "content_hash"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    rater_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    rating: Mapped[int] = mapped_column(SmallInteger)  # +1 like, -1 dislike
+    tags: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16))  # "exercise" | "pattern"
+    pattern: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    seed: Mapped[int | None] = mapped_column(BigInteger)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    generator_version: Mapped[str] = mapped_column(String(32))
+    moderated_out: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    moderated_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

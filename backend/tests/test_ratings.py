@@ -41,3 +41,22 @@ def test_content_hash_is_stable_and_order_independent() -> None:
     assert ha == hb  # key order does not change the hash
     assert ha != hc  # different content → different hash
     assert len(ha) == 64
+
+
+async def test_pattern_ratings_table_exists(client: AsyncClient) -> None:
+    # The `client` fixture runs create_all and overrides get_session; if the model
+    # is registered on Base.metadata the table exists in the test DB.
+    from sqlalchemy import text
+
+    from drumgen.api import app
+    from drumgen.db.base import SCHEMA
+    from drumgen.db.engine import get_session
+
+    override = app.dependency_overrides[get_session]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        count = await session.scalar(text(f'SELECT count(*) FROM {SCHEMA}."pattern_ratings"'))
+        assert count == 0
+    finally:
+        await agen.aclose()
