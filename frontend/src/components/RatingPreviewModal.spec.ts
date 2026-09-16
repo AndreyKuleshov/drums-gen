@@ -12,16 +12,20 @@ import RatingPreviewModal from './RatingPreviewModal.vue'
 const opts = { global: { stubs: { ScoreView: true, GrooveScore: true, teleport: true } } }
 
 describe('RatingPreviewModal', () => {
-  it('renders a groove and plays it', async () => {
+  it('renders a groove and plays it with a step callback + metronome flag', async () => {
     const wrapper = mount(RatingPreviewModal, { props: { kind: 'pattern', pattern: { bars: [] }, tempo: 100 }, ...opts })
-    expect(wrapper.html()).toContain('groove-score') // stubbed GrooveScore rendered
-    await wrapper.find('.ratebtn').trigger('click')
+    expect(wrapper.html()).toContain('groove-score')
+    await wrapper.find('[data-test="metronome"]').setValue(true)
+    await wrapper.find('.ratebtn').trigger('click') // Play
     expect(playGroove).toHaveBeenCalled()
+    const passedOpts = playGroove.mock.calls[0][1] as Record<string, unknown>
+    expect(typeof passedOpts.onStep).toBe('function')
+    expect(passedOpts.metronome).toBe(true)
   })
 
   it('renders a phrase and plays it', async () => {
     const wrapper = mount(RatingPreviewModal, { props: { kind: 'exercise', pattern: { bars: [] }, tempo: 100 }, ...opts })
-    expect(wrapper.html()).toContain('score-view') // stubbed ScoreView rendered
+    expect(wrapper.html()).toContain('score-view')
     await wrapper.find('.ratebtn').trigger('click')
     expect(playPhrase).toHaveBeenCalled()
   })
