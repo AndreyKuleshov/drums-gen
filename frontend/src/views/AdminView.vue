@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
+
+const router = useRouter()
+
+// Go back to wherever the admin came from; fall back to the generator if the
+// admin page was opened directly (no in-app history to step back to).
+function goBack(): void {
+  if (window.history.state?.back) router.back()
+  else router.push('/')
+}
 </script>
 
 <template>
@@ -13,7 +22,7 @@ import AuthNav from '../components/AuthNav.vue'
           <span class="brand__name">Admin</span>
         </div>
         <div class="brand__meta">
-          <RouterLink to="/" class="nav-link">&larr; Generator</RouterLink>
+          <button type="button" class="nav-link" @click="goBack">&larr; Back</button>
           <AuthNav />
           <span class="led led--on" aria-hidden="true" />
         </div>
