@@ -10,6 +10,7 @@ vi.mock('../lib/audio', () => ({
   parseFraction: () => 0.25,
   setMetroSub: vi.fn(),
   setMetronomeVolume: vi.fn(),
+  setPatternVolume: vi.fn(),
 }))
 vi.mock('../lib/kit', () => ({ playGroove: (...a: unknown[]) => playGroove(...a), stopGroove: vi.fn() }))
 

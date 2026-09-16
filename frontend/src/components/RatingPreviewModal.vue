@@ -8,6 +8,7 @@ import {
   playPhrase,
   setMetroSub,
   setMetronomeVolume,
+  setPatternVolume,
   stopPhrase,
 } from '../lib/audio'
 import { playGroove, stopGroove } from '../lib/kit'
@@ -28,6 +29,7 @@ const metronome = ref(false)
 const tempoVal = ref(props.tempo ?? 100)
 const metroSub = ref('1/4')
 const volume = ref(0.6)
+const patternVol = ref(0.9)
 const SUBS = ['1/4', '1/8', '1/16']
 
 const heading = computed(() => {
@@ -54,6 +56,7 @@ async function play(): Promise<void> {
   playing.value = true
   setMetroSub(parseFraction(metroSub.value))
   setMetronomeVolume(volume.value)
+  setPatternVolume(patternVol.value)
   const common = {
     tempoBpm: tempoVal.value,
     metronome: metronome.value,
@@ -143,8 +146,28 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <label class="preview__ctl">
-          vol
-          <input v-model.number="volume" class="preview__vol" type="range" min="0" max="1" step="0.05" />
+          click
+          <input
+            v-model.number="volume"
+            class="preview__vol"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            aria-label="Metronome volume"
+          />
+        </label>
+        <label class="preview__ctl">
+          kit
+          <input
+            v-model.number="patternVol"
+            class="preview__vol"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            aria-label="Pattern volume"
+          />
         </label>
       </div>
       <div class="preview__actions">

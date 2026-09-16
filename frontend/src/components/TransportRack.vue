@@ -10,6 +10,7 @@ import {
   setMetroSub,
   setMetronomeVolume,
   setOverlayClick,
+  setPatternVolume,
   setTempo,
   stopPhrase,
 } from '../lib/audio'
@@ -73,6 +74,10 @@ const metroSubWhole = computed(() =>
 const metroVolume = persistedRef('metroVolume', 0.75)
 watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
+
+// Pattern playback loudness (the drum voices, separate from the metronome click).
+const patternVolume = persistedRef('patternVolume', 0.9)
+watch(patternVolume, (v) => setPatternVolume(v), { immediate: true })
 
 async function onPlay(): Promise<void> {
   if (!props.canPlay || preparing.value) return
@@ -230,6 +235,28 @@ onBeforeUnmount(() => stopPhrase())
           </div>
         </div>
       </div>
+      <label class="volume volume--pattern" data-tip="Pattern volume" data-tip-pos="below">
+        <span class="volume__tag">Vol</span>
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path
+            d="M4 9v6h4l5 4V5L8 9zM16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <input
+          v-model.number="patternVolume"
+          class="volume__range"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          aria-label="Pattern volume"
+        />
+      </label>
     </div>
 
     <section class="metro-panel" aria-label="Metronome">
@@ -626,6 +653,19 @@ onBeforeUnmount(() => stopPhrase())
   align-items: center;
   gap: 8px;
   color: var(--text-faint);
+}
+
+/* Pattern volume lives in the transport row and is the primary mix control, so
+   it reads a touch brighter than the metronome slider and carries a label. */
+.volume--pattern {
+  color: var(--text-dim);
+}
+
+.volume__tag {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .volume__range {

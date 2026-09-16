@@ -66,7 +66,7 @@ function playSnare(time: number, velocity: number): void {
   const buf = snareBuf()
   if (!buf.loaded) return
   safeTrigger(() => {
-    const gain = new Tone.Gain(velocity).toDestination()
+    const gain = new Tone.Gain(velocity).connect(patternBus())
     const src = new Tone.ToneBufferSource(buf).connect(gain)
     src.onended = (): void => {
       try {
@@ -119,6 +119,24 @@ function getClick(): Tone.PolySynth<Tone.Synth> {
 export function setMetronomeVolume(level: number): void {
   clickVolumeDb = level <= 0.001 ? -Infinity : 24 * level - 12
   if (click !== null) click.volume.value = clickVolumeDb
+}
+
+// Master output bus for the *pattern* voices (sticking snare + full kit) — NOT
+// the metronome, which stays on its own line to Destination. Every hit connects
+// here so one control scales pattern playback everywhere. Kit hits (kit.ts) route
+// through the same bus via patternBus().
+let patternGain: Tone.Gain | null = null
+let patternLevel = 1
+
+export function patternBus(): Tone.Gain {
+  if (patternGain === null) patternGain = new Tone.Gain(patternLevel).toDestination()
+  return patternGain
+}
+
+/** Set pattern playback loudness live (level 0..1, unity at 1). */
+export function setPatternVolume(level: number): void {
+  patternLevel = Math.min(1, Math.max(0, level))
+  if (patternGain !== null) patternGain.gain.value = patternLevel
 }
 
 // Shared, live metronome settings — one source of truth for BOTH the pattern
