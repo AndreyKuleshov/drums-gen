@@ -80,9 +80,8 @@ async function setRating(value: 1 | -1): Promise<void> {
     rating.value = value
     tags.value = [] // reset reasons when flipping polarity
   }
-  // Run concurrently, not chained: they're independent side effects of the
-  // same rating transition (rating POST + favorite create/remove).
-  await Promise.all([syncFavorite(), submit()])
+  await syncFavorite()
+  await submit()
 }
 
 async function toggleTag(tag: RatingTag): Promise<void> {
@@ -100,6 +99,7 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         class="rate__btn"
         :class="{ 'rate__btn--on': rating === 1 }"
         type="button"
+        :disabled="busy"
         :aria-pressed="rating === 1"
         :title="isAuthenticated ? 'Save + like' : 'Sign in to rate'"
         @click="setRating(1)"
@@ -110,6 +110,7 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         class="rate__btn"
         :class="{ 'rate__btn--on': rating === -1 }"
         type="button"
+        :disabled="busy"
         :aria-pressed="rating === -1"
         :title="isAuthenticated ? 'Bad pattern' : 'Sign in to rate'"
         @click="setRating(-1)"
