@@ -6,6 +6,7 @@ export interface User {
   avatar_url: string | null
   social_links: string[]
   is_verified: boolean
+  is_admin: boolean
 }
 
 export interface Stroke {

@@ -13,6 +13,10 @@ class EmailNotVerifiedError(AuthError):
     """The account exists but its email is not yet confirmed."""
 
 
+class AccountBlockedError(AuthError):
+    """An admin has blocked this account from signing in."""
+
+
 class InvalidTokenError(AuthError):
     """A verification / reset token is unknown, consumed, or expired."""
 

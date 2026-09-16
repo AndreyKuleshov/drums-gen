@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteLocationNormalized } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
 import StudioView from '../views/StudioView.vue'
@@ -34,18 +35,41 @@ export const router = createRouter({
       component: () => import('../views/AccountView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin',
+      component: () => import('../views/AdminView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        { path: '', redirect: '/admin/ratings' },
+        {
+          path: 'ratings',
+          name: 'admin-ratings',
+          component: () => import('../views/AdminRatingsView.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/AdminUsersView.vue'),
+        },
+      ],
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
 // Gate protected routes. Auth state is hydrated once at app start (main.ts);
 // `ready` guarantees we don't bounce a signed-in user on a hard refresh.
-router.beforeEach(async (to) => {
+export async function authGuard(to: RouteLocationNormalized) {
   if (!to.meta.requiresAuth) return true
-  const { isAuthenticated, ready, refresh } = useAuth()
+  const { isAuthenticated, ready, refresh, user } = useAuth()
   if (!ready.value) await refresh()
   if (!isAuthenticated.value) {
     return { name: 'login', query: { next: to.fullPath } }
   }
+  if (to.meta.requiresAdmin && !user.value?.is_admin) {
+    return { name: 'studio' }
+  }
   return true
-})
+}
+
+router.beforeEach(authGuard)

@@ -4,7 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
 import GrooveScore from '../components/GrooveScore.vue'
-import LikeButton from '../components/LikeButton.vue'
+import RateControl from '../components/RateControl.vue'
 import ScoreView from '../components/ScoreView.vue'
 import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
@@ -154,6 +154,21 @@ const likeMeta = computed<Record<string, unknown>>(() => ({
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
   bars: bars.value,
   tempo: tempo.value,
+}))
+
+const ratingKind = computed<'exercise' | 'pattern'>(() =>
+  displayGroove.value !== null ? 'pattern' : 'exercise',
+)
+const ratingParams = computed<Record<string, unknown>>(() => ({
+  time_sig: { num: 4, den: 4 },
+  num_bars: bars.value,
+  subdivision: subdivision.value === 'mixed' ? '1/16' : subdivision.value,
+  mixed: subdivision.value === 'mixed',
+  tempo_bpm: tempo.value,
+  singles: singles.value,
+  odd: odd.value,
+  paradiddle: paradiddle.value,
+  voicing: voicing.value,
 }))
 
 // --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
@@ -418,16 +433,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <LikeButton
-            v-if="likePayload"
-            class="screen__like"
-            :payload="likePayload"
-            :meta="likeMeta"
-            next="/patterns2"
-          />
-          <!-- The notation is inset from the right while SAVE is shown, so the
-               first row's top-right (sticking + accents) never slides under the
-               floating button. -->
           <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
             <GrooveScore
               v-if="viewGroove"
@@ -450,6 +455,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               </p>
             </div>
           </div>
+          <RateControl
+            v-if="likePayload"
+            class="screen__rate"
+            :pattern="likePayload"
+            :kind="ratingKind"
+            :params="ratingParams"
+            :seed="null"
+            :meta="likeMeta"
+          />
         </div>
       </section>
 
@@ -806,6 +820,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
 }
 
+/* Rating thumbs float in the notation screen's top-right corner (like the old
+   like button). The stage reserves a right inset so notation never collides. */
+.screen__rate {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+}
+.screen__stage--inset {
+  padding-right: 96px;
+}
+
 .ptools__sep {
   width: 1px;
   align-self: stretch;
@@ -880,17 +906,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   align-items: center;
 }
 
-/* Reserve the top-right corner for the floating SAVE pill (80px + gap). */
-.screen__stage--inset {
-  margin-right: 100px;
-}
-
-.screen__like {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-}
 .screen__empty {
   width: 100%;
   padding: 40px 24px;
