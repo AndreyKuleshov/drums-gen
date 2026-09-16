@@ -433,7 +433,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <div class="screen__stage">
+          <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
             <GrooveScore
               v-if="viewGroove"
               :groove="viewGroove"
@@ -455,6 +455,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
               </p>
             </div>
           </div>
+          <RateControl
+            v-if="likePayload"
+            class="screen__rate"
+            :pattern="likePayload"
+            :kind="ratingKind"
+            :params="ratingParams"
+            :seed="null"
+            :meta="likeMeta"
+          />
         </div>
       </section>
 
@@ -542,16 +551,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           Undo
         </button>
       </div>
-
-      <RateControl
-        v-if="likePayload"
-        class="prate"
-        :pattern="likePayload"
-        :kind="ratingKind"
-        :params="ratingParams"
-        :seed="null"
-        :meta="likeMeta"
-      />
 
       <TransportRack
         ref="transport"
@@ -821,8 +820,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
 }
 
-.prate {
-  margin-top: 8px;
+/* Rating thumbs float in the notation screen's top-right corner (like the old
+   like button). The stage reserves a right inset so notation never collides. */
+.screen__rate {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+}
+.screen__stage--inset {
+  padding-right: 96px;
 }
 
 .ptools__sep {

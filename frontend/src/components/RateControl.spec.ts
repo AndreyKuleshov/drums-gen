@@ -34,7 +34,7 @@ describe('RateControl', () => {
     await flushPromises()
     expect(rate).toHaveBeenCalledWith(expect.objectContaining({ rating: 1 }))
     expect(like).toHaveBeenCalledWith(props.pattern, props.meta)
-    expect(wrapper.find('.rate__saved').exists()).toBe(true)
+    expect(wrapper.find('.rate__toast').exists()).toBe(true)
     expect(wrapper.findAll('.rate__btn')[0].attributes('aria-label')).toContain('save')
     await up.trigger('click') // toggle off → rate 0 + unsave
     await flushPromises()

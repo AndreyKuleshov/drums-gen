@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
@@ -17,17 +17,26 @@ const props = defineProps<{
 const router = useRouter()
 const { isAuthenticated } = useAuth()
 
-const DISLIKE_TAGS: RatingTag[] = ['too_busy', 'boring', 'unmusical', 'awkward_sticking', 'repetitive', 'too_hard']
-const LIKE_TAGS: RatingTag[] = ['groovy', 'creative', 'playable']
+const DISLIKE_TAGS: RatingTag[] = [
+  'too_busy',
+  'boring',
+  'unmusical',
+  'awkward_sticking',
+  'repetitive',
+  'too_hard',
+]
 
 const rating = ref<0 | 1 | -1>(0)
 const tags = ref<RatingTag[]>([])
 const note = ref('')
 const busy = ref(false)
 const savedId = ref<string | null>(null)
+const showToast = ref(false) // 👍 confirmation
+const showForm = ref(false) // 👎 tags + comment popover
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-// A new pattern is a new data point — reset the control. The previously-saved
-// favorite (if any) persists on its own; it's not tied to this control instance.
+// A new pattern is a new data point — reset. Any previously-saved favorite
+// persists on its own; it's not tied to this control instance.
 watch(
   () => props.pattern,
   () => {
@@ -35,6 +44,8 @@ watch(
     tags.value = []
     note.value = ''
     savedId.value = null
+    showForm.value = false
+    showToast.value = false
   },
 )
 
@@ -55,8 +66,7 @@ async function submit(): Promise<void> {
   }
 }
 
-// Save/unsave the favorite on the RATING VALUE transition only — chip toggles
-// and note edits just re-POST the rating and must never touch the favorite.
+// Save/unsave the favorite on the RATING VALUE transition only.
 async function syncFavorite(): Promise<void> {
   if (rating.value === 1 && savedId.value === null) {
     const saved = await likePattern(props.pattern, props.meta)
@@ -66,6 +76,14 @@ async function syncFavorite(): Promise<void> {
     savedId.value = null
     await unlikePattern(id)
   }
+}
+
+function flashToast(): void {
+  showToast.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    showToast.value = false
+  }, 2200)
 }
 
 async function setRating(value: 1 | -1): Promise<void> {
@@ -82,6 +100,10 @@ async function setRating(value: 1 | -1): Promise<void> {
   }
   await syncFavorite()
   await submit()
+  // 👍 → transient "added to favorites"; 👎 → open the tags/comment form.
+  showForm.value = rating.value === -1
+  if (rating.value === 1) flashToast()
+  else showToast.value = false
 }
 
 async function toggleTag(tag: RatingTag): Promise<void> {
@@ -90,11 +112,14 @@ async function toggleTag(tag: RatingTag): Promise<void> {
     : [...tags.value, tag]
   await submit()
 }
+
+onBeforeUnmount(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+})
 </script>
 
 <template>
   <div class="rate" role="group" aria-label="Rate this pattern">
-    <span class="rate__label">Rate</span>
     <div class="rate__thumbs">
       <button
         class="rate__btn"
@@ -114,78 +139,179 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         type="button"
         :disabled="busy"
         :aria-pressed="rating === -1"
-        :title="isAuthenticated ? 'Bad pattern' : 'Sign in to rate'"
+        :title="isAuthenticated ? 'Dislike' : 'Sign in to rate'"
         @click="setRating(-1)"
       >
         👎
       </button>
     </div>
 
-    <span v-if="rating === 1 && savedId" class="rate__saved">★ saved to favorites</span>
-    <span v-else class="rate__hint">saves to your favorites</span>
+    <div v-if="showToast" class="rate__toast" role="status">★ Added to favorites</div>
 
-    <div v-if="rating !== 0" class="rate__reasons">
-      <button
-        v-for="tag in rating === -1 ? DISLIKE_TAGS : LIKE_TAGS"
-        :key="tag"
-        class="rate__chip"
-        :class="{ 'rate__chip--on': tags.includes(tag) }"
-        type="button"
-        :aria-pressed="tags.includes(tag)"
-        @click="toggleTag(tag)"
-      >
-        {{ tag.replace(/_/g, ' ') }}
-      </button>
-      <input
+    <div v-if="showForm" class="rate__form" role="group" aria-label="Why the dislike?">
+      <div class="rate__form-head">
+        <span>What's off?</span>
+        <button type="button" class="rate__x" aria-label="Close" @click="showForm = false">×</button>
+      </div>
+      <div class="rate__chips">
+        <button
+          v-for="tag in DISLIKE_TAGS"
+          :key="tag"
+          class="rate__chip"
+          :class="{ 'rate__chip--on': tags.includes(tag) }"
+          type="button"
+          :aria-pressed="tags.includes(tag)"
+          @click="toggleTag(tag)"
+        >
+          {{ tag.replace(/_/g, ' ') }}
+        </button>
+      </div>
+      <textarea
         v-model="note"
         class="rate__note"
-        type="text"
+        rows="2"
         maxlength="500"
-        placeholder="note (optional)"
-        aria-label="Optional rating note"
+        placeholder="comment (optional)"
+        aria-label="Dislike comment"
         @blur="submit"
       />
+      <button type="button" class="rate__done" @click="showForm = false">Done</button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .rate {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--edge);
-  background: linear-gradient(180deg, var(--raised), var(--panel));
+  position: relative;
 }
-.rate__label {
-  font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--text-faint);
+.rate__thumbs {
+  display: flex;
+  gap: 6px;
 }
-.rate__thumbs { display: flex; gap: 8px; }
 .rate__btn {
-  min-width: 42px; padding: 5px 12px; border-radius: var(--r-sm); border: 1px solid var(--edge);
+  width: 40px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised-hi), var(--panel));
-  font-size: 1.05rem; line-height: 1; cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.18s ease;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.18s ease;
 }
-.rate__btn:hover:not(:disabled) { box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.28); }
+.rate__btn:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+}
 .rate__btn--up {
   border-color: var(--amber-dim);
   box-shadow: inset 0 0 0 1px var(--amber-dim), 0 0 12px -4px var(--amber-glow);
 }
-.rate__btn--down { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
-.rate__btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.rate__saved { font-family: var(--font-mono); font-size: 0.62rem; color: var(--amber-bright); }
-.rate__hint { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-faint); }
-.rate__reasons {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 2px;
+.rate__btn--down {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.rate__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rate__toast {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--amber-dim);
+  background: #0b0908;
+  color: var(--amber-bright);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  box-shadow: var(--shadow-2);
+  z-index: 5;
+}
+.rate__form {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  z-index: 6;
+  padding: 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised-hi), var(--panel));
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rate__form-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.rate__x {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.rate__x:hover {
+  color: var(--danger);
+}
+.rate__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .rate__chip {
-  padding: 3px 8px; border-radius: var(--r-sm); border: 1px dashed var(--edge);
-  background: transparent; color: var(--text-dim); font-family: var(--font-mono);
-  font-size: 0.64rem; cursor: pointer;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--edge);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  cursor: pointer;
 }
-.rate__chip--on { color: var(--amber-bright); border-style: solid; border-color: var(--amber-dim); }
+.rate__chip--on {
+  color: var(--amber-bright);
+  border-style: solid;
+  border-color: var(--amber-dim);
+}
 .rate__note {
-  flex: 1 1 140px; min-width: 120px; padding: 4px 8px; border-radius: var(--r-sm);
-  border: 1px solid var(--edge); background: var(--field-ink); color: var(--text); font-size: 0.72rem;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge);
+  background: var(--field-ink);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.72rem;
+  resize: vertical;
+}
+.rate__done {
+  align-self: flex-end;
+  padding: 4px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+.rate__done:hover {
+  color: var(--amber-bright);
 }
 </style>
