@@ -165,7 +165,7 @@ onMounted(load)
               </td>
               <td>{{ row.tags.join(', ') }}</td>
               <td>{{ row.note }}</td>
-              <td>{{ row.kind }}</td>
+              <td>Pattern 2.0</td>
               <td class="ratetable__params">{{ paramSummary(row.params) }}</td>
               <td class="ratetable__nowrap">{{ row.generator_version }}</td>
               <td>{{ row.rater_email }}</td>
