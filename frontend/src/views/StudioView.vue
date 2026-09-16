@@ -3,10 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
-import GrooveScore from '../components/GrooveScore.vue'
-import LikeButton from '../components/LikeButton.vue'
 import ModeSwitch from '../components/ModeSwitch.vue'
-import ScoreView from '../components/ScoreView.vue'
+import NotationScreen from '../components/NotationScreen.vue'
 import StudioControls from '../components/StudioControls.vue'
 import type { StudioForm } from '../components/StudioControls.vue'
 import TransportRack from '../components/TransportRack.vue'
@@ -154,6 +152,7 @@ const likeMeta = computed<Record<string, unknown>>(() => {
   if (mode.value === 'groove') {
     return {
       kind: 'pattern',
+      view: 'studio', // which studio saved it — favorites reopen here
       level,
       meter: f ? `${f.num}/${f.den}` : '—',
       type: f ? cap(f.style) : '—',
@@ -164,6 +163,7 @@ const likeMeta = computed<Record<string, unknown>>(() => {
   }
   return {
     kind: 'exercise',
+    view: 'studio',
     level,
     meter: f ? `${f.num}/${f.den}` : '—',
     grid: f ? gridOf(f) : '—',
@@ -174,6 +174,9 @@ const likeMeta = computed<Record<string, unknown>>(() => {
     tempo: tempo.value,
   }
 })
+
+// The generation form, as the reproducible params stored with a rating.
+const ratingParams = computed<Record<string, unknown>>(() => ({ ...(lastForm.value ?? {}) }))
 
 const brandName = computed(() =>
   mode.value === 'groove' ? 'Groove Pattern' : 'Rudiment Exercises',
@@ -247,38 +250,27 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section class="screen" aria-label="Notation display">
-        <div class="screen__glass" :class="{ 'screen__glass--boot': booting }">
-          <LikeButton
-            v-if="likePayload"
-            class="screen__like"
-            :payload="likePayload"
-            :meta="likeMeta"
-            next="/"
-          />
-          <GrooveScore
-            v-if="mode === 'groove' && groove"
-            :groove="groove"
-            :active-step="activeStep"
-          />
-          <ScoreView
-            v-else-if="mode === 'exercise' && phrase"
-            :phrase="phrase"
-            :active-step="activeStep"
-          />
-          <div v-else class="screen__empty">
-            <span class="screen__empty-glyph" aria-hidden="true">&#9834;</span>
-            <p class="screen__empty-text">{{ emptyText }}</p>
-          </div>
-        </div>
-
-        <dl v-if="spec.length" class="specplate" aria-label="Pattern summary">
-          <div v-for="row in spec" :key="row.label">
-            <dt>{{ row.label }}</dt>
-            <dd>{{ row.value }}<small v-if="row.small">{{ row.small }}</small></dd>
-          </div>
-        </dl>
-      </section>
+      <NotationScreen
+        :groove="mode === 'groove' ? groove : null"
+        :phrase="mode === 'exercise' ? phrase : null"
+        :active-step="activeStep"
+        :empty-text="emptyText"
+        :boot="booting"
+        :rate="likePayload"
+        :rate-kind="mode === 'groove' ? 'pattern' : 'exercise'"
+        :rate-params="ratingParams"
+        :rate-seed="null"
+        :rate-meta="likeMeta"
+      >
+        <template #below>
+          <dl v-if="spec.length" class="specplate" aria-label="Pattern summary">
+            <div v-for="row in spec" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}<small v-if="row.small">{{ row.small }}</small></dd>
+            </div>
+          </dl>
+        </template>
+      </NotationScreen>
 
       <TransportRack
         ref="transport"
@@ -296,57 +288,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.screen {
-  border-radius: var(--r-lg);
-  padding: 10px;
-  background: linear-gradient(180deg, #0f0d0b, #171310);
-  border: 1px solid var(--edge);
-  box-shadow: var(--inset);
-}
-
-.screen__glass {
-  position: relative;
-  min-height: 220px;
-  border-radius: var(--r-md);
-  background: linear-gradient(180deg, #fbf6ec, var(--screen));
-  border: 1px solid var(--screen-edge);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-    inset 0 2px 14px rgba(120, 96, 60, 0.18),
-    0 0 22px -6px var(--amber-glow);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-}
-
-.screen__like {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-}
-
-.screen__glass--boot {
-  animation: screen-boot 550ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes screen-boot {
-  0% {
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-      inset 0 2px 14px rgba(120, 96, 60, 0.18),
-      0 0 46px 2px var(--amber-glow);
-    filter: brightness(1.05);
-  }
-  100% {
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-      inset 0 2px 14px rgba(120, 96, 60, 0.18),
-      0 0 22px -6px var(--amber-glow);
-    filter: brightness(1);
-  }
-}
-
 .specplate {
   display: flex;
   flex-wrap: wrap;
@@ -382,28 +323,6 @@ onBeforeUnmount(() => {
   font-size: 0.58rem;
   color: var(--text-faint);
   letter-spacing: 0.08em;
-}
-
-.screen__empty {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 48px 24px;
-  text-align: center;
-}
-
-.screen__empty-glyph {
-  font-size: 2.4rem;
-  color: #b9ac93;
-  line-height: 1;
-}
-
-.screen__empty-text {
-  max-width: 42ch;
-  color: #6b6252;
-  font-size: 0.95rem;
 }
 
 .formmsg--error {

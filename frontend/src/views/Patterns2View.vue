@@ -3,15 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
-import GrooveScore from '../components/GrooveScore.vue'
-import RateControl from '../components/RateControl.vue'
-import ScoreView from '../components/ScoreView.vue'
+import NotationScreen from '../components/NotationScreen.vue'
 import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
 import { ApiError, apiFetch } from '../lib/api'
 import { parseFraction, playPhrase, stopPhrase } from '../lib/audio'
 import { playGroove, stopGroove } from '../lib/kit'
+import { takePendingGroove, takePendingPhrase } from '../lib/loadedPattern'
 import { persistedRef } from '../lib/storage'
 import type { Groove, Hit, Phrase } from '../types'
 
@@ -149,6 +148,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 const likePayload = computed(() => viewGroove.value ?? viewPhrase.value)
 const likeMeta = computed<Record<string, unknown>>(() => ({
   kind: displayGroove.value !== null ? 'pattern' : 'exercise',
+  view: 'patterns2', // which studio saved it — favorites reopen here
   level: revoiced.value ? 'Kit' : cap(voicing.value),
   meter: '4/4',
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
@@ -408,7 +408,22 @@ function onGlobalKey(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKey)
+  // A favorite opened from My Account lands here as a pending groove/phrase.
+  const g = takePendingGroove()
+  if (g !== null) {
+    groove.value = g
+    phrase.value = null
+    revoicedGroove.value = null
+  }
+  const p = takePendingPhrase()
+  if (p !== null) {
+    phrase.value = p
+    groove.value = null
+    revoicedGroove.value = null
+  }
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
 
@@ -431,41 +446,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         </div>
       </header>
 
-      <section class="screen" aria-label="Notation display">
-        <div class="screen__glass">
-          <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
-            <GrooveScore
-              v-if="viewGroove"
-              :groove="viewGroove"
-              :active-step="activeStep"
-              label-hihat
-              editable
-              @note-click="onGrooveNoteClick"
-            />
-            <ScoreView
-              v-else-if="viewPhrase"
-              :phrase="viewPhrase"
-              :active-step="activeStep"
-              editable
-              @note-click="onNoteClick"
-            />
-            <div v-else class="screen__empty">
-              <p class="screen__empty-text">
-                Toggle families and hit Generate for a sticking pattern.
-              </p>
-            </div>
-          </div>
-          <RateControl
-            v-if="likePayload"
-            class="screen__rate"
-            :pattern="likePayload"
-            :kind="ratingKind"
-            :params="ratingParams"
-            :seed="null"
-            :meta="likeMeta"
-          />
-        </div>
-      </section>
+      <NotationScreen
+        :groove="viewGroove"
+        :phrase="viewPhrase"
+        :active-step="activeStep"
+        empty-text="Toggle families and hit Generate for a sticking pattern."
+        editable
+        label-hihat
+        :rate="likePayload"
+        :rate-kind="ratingKind"
+        :rate-params="ratingParams"
+        :rate-seed="null"
+        :rate-meta="likeMeta"
+        @groove-note-click="onGrooveNoteClick"
+        @phrase-note-click="onNoteClick"
+      />
 
       <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
            separate from the generation form below. Buttons hold their slots
@@ -820,18 +815,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   box-shadow: var(--shadow-1), inset 0 1px 0 rgba(239, 231, 216, 0.03);
 }
 
-/* Rating thumbs float in the notation screen's top-right corner (like the old
-   like button). The stage reserves a right inset so notation never collides. */
-.screen__rate {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 4;
-}
-.screen__stage--inset {
-  padding-right: 96px;
-}
-
 .ptools__sep {
   width: 1px;
   align-self: stretch;
@@ -881,39 +864,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   cursor: not-allowed;
 }
 
-.screen {
-  border-radius: var(--r-lg);
-  padding: 10px;
-  background: linear-gradient(180deg, #0f0d0b, #171310);
-  border: 1px solid var(--edge);
-}
-.screen__glass {
-  position: relative;
-  min-height: 200px;
-  border-radius: var(--r-md);
-  background: linear-gradient(180deg, #fbf6ec, var(--screen));
-  border: 1px solid var(--screen-edge);
-  display: flex;
-  align-items: center;
-}
-
-/* Holds the notation and fills the glass; margin (not padding) keeps the
-   measured width smaller so the score renders narrower than the glass. */
-.screen__stage {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.screen__empty {
-  width: 100%;
-  padding: 40px 24px;
-  text-align: center;
-}
-.screen__empty-text {
-  color: #6b6252;
-}
 .formmsg--error {
   color: var(--danger);
   font-size: 0.88rem;
