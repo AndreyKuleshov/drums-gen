@@ -8,9 +8,15 @@ import { describe, expect, it, vi } from 'vitest'
 // A plain `const rows = [...]` below the factory would still be in its temporal
 // dead zone when the factory dereferences it eagerly via `.mockResolvedValue(rows)`.
 const { rows, setAdmin } = vi.hoisted(() => {
+  // Explicit, deterministic `created_at` values (not sequential `new Date()`
+  // calls): AdminUsersView now sorts by `created_at` desc by default, so real
+  // millisecond timing differences between rows would nondeterministically
+  // reorder them and break the own-row-disabled index assertion below. `me`
+  // is deliberately the newest so it sorts first, matching the assertions.
   const rows = [
-    { id: 'me', email: 'me@x.io', display_name: 'Me', is_admin: true, is_verified: true, created_at: new Date().toISOString() },
-    { id: 'other', email: 'o@x.io', display_name: 'Other', is_admin: false, is_verified: true, created_at: new Date().toISOString() },
+    { id: 'me', email: 'me@x.io', display_name: 'Me', is_admin: true, is_verified: true, created_at: '2024-01-03T00:00:00.000Z' },
+    { id: 'other', email: 'o@x.io', display_name: 'Other', is_admin: false, is_verified: true, created_at: '2024-01-02T00:00:00.000Z' },
+    { id: 'x', email: 'zzz@x.io', display_name: 'Zed', is_admin: false, is_verified: true, created_at: '2024-01-01T00:00:00.000Z' },
   ]
   const setAdmin = vi.fn().mockResolvedValue({ ...rows[1], is_admin: true })
   return { rows, setAdmin }
@@ -40,5 +46,10 @@ describe('AdminUsersView', () => {
     expect((buttons[0].element as HTMLButtonElement).disabled).toBe(true)
     await buttons[1].trigger('click')
     expect(setAdmin).toHaveBeenCalledWith('other', true)
+
+    await wrapper.find('[data-test="user-filter"]').setValue('zzz')
+    await flushPromises()
+    expect(wrapper.text()).toContain('zzz@x.io')
+    expect(wrapper.text()).not.toContain('o@x.io')
   })
 })

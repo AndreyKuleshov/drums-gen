@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import { useAuth } from '../lib/auth'
 import { adminListUsers, adminSetUserAdmin, type AdminUserRow } from '../lib/adminUsers'
@@ -9,6 +9,33 @@ const users = ref<AdminUserRow[]>([])
 const loading = ref(true)
 const error = ref('')
 const actionError = ref('')
+
+const query = ref('')
+type UKey = 'email' | 'display_name' | 'is_verified' | 'is_admin' | 'created_at'
+const sortKey = ref<UKey>('created_at')
+const sortDir = ref<1 | -1>(-1)
+
+function toggleSort(key: UKey): void {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 1 ? -1 : 1
+  else {
+    sortKey.value = key
+    sortDir.value = 1
+  }
+}
+
+const visibleUsers = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  const filtered = q
+    ? users.value.filter(
+        (u) => u.email.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q),
+      )
+    : users.value
+  return [...filtered].sort((a, b) => {
+    const av = String(a[sortKey.value] ?? '')
+    const bv = String(b[sortKey.value] ?? '')
+    return av < bv ? -sortDir.value : av > bv ? sortDir.value : 0
+  })
+})
 
 async function load(): Promise<void> {
   loading.value = true
@@ -43,13 +70,27 @@ onMounted(load)
 
     <div v-else>
       <p v-if="actionError" class="usersmsg" role="alert">{{ actionError }}</p>
+      <input
+        v-model="query"
+        class="userfilter"
+        type="text"
+        data-test="user-filter"
+        placeholder="filter by email or name"
+        aria-label="Filter users"
+      />
       <div class="usertable-wrap">
         <table class="usertable">
           <thead>
-            <tr><th>Email</th><th>Name</th><th>Verified</th><th>Admin</th><th>Joined</th></tr>
+            <tr>
+              <th class="is-sortable" @click="toggleSort('email')">Email</th>
+              <th class="is-sortable" @click="toggleSort('display_name')">Name</th>
+              <th class="is-sortable" @click="toggleSort('is_verified')">Verified</th>
+              <th class="is-sortable" @click="toggleSort('is_admin')">Admin</th>
+              <th class="is-sortable" @click="toggleSort('created_at')">Joined</th>
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="row in users" :key="row.id">
+            <tr v-for="row in visibleUsers" :key="row.id">
               <td>{{ row.email }}</td>
               <td>{{ row.display_name }}</td>
               <td>{{ row.is_verified ? '✓' : '—' }}</td>
@@ -86,4 +127,10 @@ onMounted(load)
 }
 .userbtn--on { color: var(--amber-bright); border-color: var(--amber-dim); }
 .userbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.userfilter {
+  margin-bottom: 10px; padding: 5px 8px; border-radius: var(--r-sm); border: 1px solid var(--edge);
+  background: var(--field-ink); color: var(--text); font-size: 0.74rem; min-width: 240px;
+}
+.usertable th.is-sortable { cursor: pointer; user-select: none; }
+.usertable th.is-sortable:hover { color: var(--amber-bright); }
 </style>
