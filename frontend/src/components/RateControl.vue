@@ -102,6 +102,7 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         :disabled="busy"
         :aria-pressed="rating === 1"
         :title="isAuthenticated ? 'Save + like' : 'Sign in to rate'"
+        aria-label="Like and save to favorites"
         @click="setRating(1)"
       >
         👍
@@ -118,6 +119,9 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         👎
       </button>
     </div>
+
+    <span v-if="rating === 1 && savedId" class="rate__saved">★ saved to favorites</span>
+    <span class="rate__hint">👍 rates + saves</span>
 
     <div v-if="rating !== 0" class="rate__reasons">
       <button
@@ -152,6 +156,8 @@ async function toggleTag(tag: RatingTag): Promise<void> {
   background: transparent; font-size: 0.95rem; line-height: 1; cursor: pointer;
 }
 .rate__btn--on { border-color: var(--amber-dim); box-shadow: inset 0 0 0 1px var(--amber-dim); }
+.rate__saved { font-family: var(--font-mono); font-size: 0.62rem; color: var(--amber-bright); }
+.rate__hint { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-faint); }
 .rate__reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rate__chip {
   padding: 3px 8px; border-radius: var(--r-sm); border: 1px dashed var(--edge);
