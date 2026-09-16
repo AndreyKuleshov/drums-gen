@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { sampleLoad } from '../lib/samples'
-import { persistedRef } from '../lib/storage'
+import { persistedRef, saveSetting } from '../lib/storage'
 import {
   parseFraction,
   playMetronome,
@@ -76,8 +76,17 @@ watch(metroVolume, (v) => setMetronomeVolume(v), { immediate: true })
 watch(metroSubWhole, (v) => setMetroSub(v), { immediate: true })
 
 // Pattern playback loudness (the drum voices, separate from the metronome click).
+// Persist live on every change — not only on the Generate flush — so it survives
+// navigating away and back, and apply it to the audio bus immediately.
 const patternVolume = persistedRef('patternVolume', 0.9)
-watch(patternVolume, (v) => setPatternVolume(v), { immediate: true })
+watch(
+  patternVolume,
+  (v) => {
+    setPatternVolume(v)
+    saveSetting('patternVolume', v)
+  },
+  { immediate: true },
+)
 
 async function onPlay(): Promise<void> {
   if (!props.canPlay || preparing.value) return
