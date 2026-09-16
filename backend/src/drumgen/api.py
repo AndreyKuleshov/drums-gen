@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from drumgen.account.router import router as account_router
+from drumgen.admin_users.router import router as admin_users_router
 from drumgen.auth.router import router as auth_router
 from drumgen.catalog import MVP_CATALOG
 from drumgen.config import get_settings
@@ -41,6 +42,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(account_router)
+app.include_router(admin_users_router)
 app.include_router(patterns_router)
 app.include_router(ratings_router)
 
