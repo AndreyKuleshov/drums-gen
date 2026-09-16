@@ -3,7 +3,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import GrooveScore from './GrooveScore.vue'
 import ScoreView from './ScoreView.vue'
-import { playPhrase, stopPhrase } from '../lib/audio'
+import {
+  parseFraction,
+  playPhrase,
+  setMetroSub,
+  setMetronomeVolume,
+  stopPhrase,
+} from '../lib/audio'
 import { playGroove, stopGroove } from '../lib/kit'
 import type { Groove, Phrase } from '../types'
 
@@ -19,6 +25,10 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const playing = ref(false)
 const activeStep = ref<number | null>(null)
 const metronome = ref(false)
+const tempoVal = ref(props.tempo ?? 100)
+const metroSub = ref('1/4')
+const volume = ref(0.6)
+const SUBS = ['1/4', '1/8', '1/16']
 
 const heading = computed(() => {
   const parts: string[] = [props.kind]
@@ -42,8 +52,10 @@ function focusable(): HTMLElement[] {
 
 async function play(): Promise<void> {
   playing.value = true
+  setMetroSub(parseFraction(metroSub.value))
+  setMetronomeVolume(volume.value)
   const common = {
-    tempoBpm: props.tempo,
+    tempoBpm: tempoVal.value,
     metronome: metronome.value,
     onStep: (i: number | null) => {
       activeStep.value = i
@@ -109,11 +121,33 @@ onBeforeUnmount(() => {
         <GrooveScore v-if="kind === 'pattern'" :groove="(pattern as Groove)" :active-step="activeStep" />
         <ScoreView v-else :phrase="(pattern as Phrase)" :active-step="activeStep" />
       </div>
-      <div class="preview__actions">
-        <label class="preview__metro">
+      <div class="preview__metrobar">
+        <label class="preview__metro-on">
           <input v-model="metronome" type="checkbox" data-test="metronome" />
           metronome
         </label>
+        <label class="preview__ctl">
+          bpm
+          <input v-model.number="tempoVal" class="preview__num" type="number" min="20" max="300" />
+        </label>
+        <div class="preview__subs" role="group" aria-label="Click subdivision">
+          <button
+            v-for="s in SUBS"
+            :key="s"
+            type="button"
+            class="preview__sub"
+            :class="{ 'is-on': metroSub === s }"
+            @click="metroSub = s"
+          >
+            {{ s }}
+          </button>
+        </div>
+        <label class="preview__ctl">
+          vol
+          <input v-model.number="volume" class="preview__vol" type="range" min="0" max="1" step="0.05" />
+        </label>
+      </div>
+      <div class="preview__actions">
         <button v-if="!playing" type="button" class="ratebtn" @click="play">▶ Play</button>
         <button v-else type="button" class="ratebtn" @click="stop">■ Stop</button>
         <button type="button" class="ratebtn" @click="emit('close')">Close</button>
@@ -140,8 +174,27 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 .preview__score { background: var(--screen); border-radius: var(--r-md); overflow-x: auto; padding: 8px; }
-.preview__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.preview__metro { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim); }
+.preview__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.preview__metrobar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 14px;
+  padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+}
+.preview__metro-on,
+.preview__ctl { display: inline-flex; align-items: center; gap: 6px; }
+.preview__num {
+  width: 58px; padding: 3px 6px; border-radius: var(--r-sm); border: 1px solid var(--edge);
+  background: var(--field-ink); color: var(--text); font-family: var(--font-mono); font-size: 0.7rem;
+}
+.preview__subs { display: inline-flex; gap: 4px; }
+.preview__sub {
+  padding: 3px 8px; border-radius: var(--r-sm); border: 1px solid var(--edge);
+  background: transparent; color: var(--text-dim); font-family: var(--font-mono);
+  font-size: 0.64rem; cursor: pointer;
+}
+.preview__sub.is-on { color: var(--amber-bright); border-color: var(--amber-dim); }
+.preview__vol { width: 92px; accent-color: var(--amber); }
 .ratebtn {
   padding: 7px 14px; border-radius: var(--r-md); border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised), var(--panel)); color: var(--text-dim);

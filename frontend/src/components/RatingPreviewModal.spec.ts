@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 const playPhrase = vi.fn().mockResolvedValue(undefined)
 const playGroove = vi.fn().mockResolvedValue(undefined)
-vi.mock('../lib/audio', () => ({ playPhrase: (...a: unknown[]) => playPhrase(...a), stopPhrase: vi.fn() }))
+vi.mock('../lib/audio', () => ({
+  playPhrase: (...a: unknown[]) => playPhrase(...a),
+  stopPhrase: vi.fn(),
+  parseFraction: () => 0.25,
+  setMetroSub: vi.fn(),
+  setMetronomeVolume: vi.fn(),
+}))
 vi.mock('../lib/kit', () => ({ playGroove: (...a: unknown[]) => playGroove(...a), stopGroove: vi.fn() }))
 
 import RatingPreviewModal from './RatingPreviewModal.vue'
