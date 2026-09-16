@@ -146,7 +146,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-if="showToast" class="rate__toast" role="status">★ Added to favorites</div>
+    <div v-if="showToast" class="rate__toast" role="status">Added to favorites</div>
 
     <div v-if="showForm" class="rate__form" role="group" aria-label="Why the dislike?">
       <div class="rate__form-head">
