@@ -4,7 +4,6 @@ import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
 import GrooveScore from '../components/GrooveScore.vue'
-import LikeButton from '../components/LikeButton.vue'
 import RateControl from '../components/RateControl.vue'
 import ScoreView from '../components/ScoreView.vue'
 import Stepper from '../components/Stepper.vue'
@@ -434,17 +433,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <section class="screen" aria-label="Notation display">
         <div class="screen__glass">
-          <LikeButton
-            v-if="likePayload"
-            class="screen__like"
-            :payload="likePayload"
-            :meta="likeMeta"
-            next="/patterns2"
-          />
-          <!-- The notation is inset from the right while SAVE is shown, so the
-               first row's top-right (sticking + accents) never slides under the
-               floating button. -->
-          <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
+          <div class="screen__stage">
             <GrooveScore
               v-if="viewGroove"
               :groove="viewGroove"
@@ -561,6 +550,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         :kind="ratingKind"
         :params="ratingParams"
         :seed="null"
+        :meta="likeMeta"
       />
 
       <TransportRack
@@ -909,17 +899,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   align-items: center;
 }
 
-/* Reserve the top-right corner for the floating SAVE pill (80px + gap). */
-.screen__stage--inset {
-  margin-right: 100px;
-}
-
-.screen__like {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-}
 .screen__empty {
   width: 100%;
   padding: 40px 24px;

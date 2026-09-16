@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuth } from '../lib/auth'
+import { likePattern, unlikePattern } from '../lib/patterns'
 import { ratePattern, type RatingTag } from '../lib/ratings'
 
 const props = defineProps<{
@@ -10,6 +11,7 @@ const props = defineProps<{
   kind: 'exercise' | 'pattern'
   params: Record<string, unknown>
   seed: number | null
+  meta: Record<string, unknown>
 }>()
 
 const router = useRouter()
@@ -22,14 +24,17 @@ const rating = ref<0 | 1 | -1>(0)
 const tags = ref<RatingTag[]>([])
 const note = ref('')
 const busy = ref(false)
+const savedId = ref<string | null>(null)
 
-// A new pattern is a new data point — reset the control.
+// A new pattern is a new data point — reset the control. The previously-saved
+// favorite (if any) persists on its own; it's not tied to this control instance.
 watch(
   () => props.pattern,
   () => {
     rating.value = 0
     tags.value = []
     note.value = ''
+    savedId.value = null
   },
 )
 
@@ -50,6 +55,19 @@ async function submit(): Promise<void> {
   }
 }
 
+// Save/unsave the favorite on the RATING VALUE transition only — chip toggles
+// and note edits just re-POST the rating and must never touch the favorite.
+async function syncFavorite(): Promise<void> {
+  if (rating.value === 1 && savedId.value === null) {
+    const saved = await likePattern(props.pattern, props.meta)
+    savedId.value = saved.id
+  } else if (rating.value !== 1 && savedId.value !== null) {
+    const id = savedId.value
+    savedId.value = null
+    await unlikePattern(id)
+  }
+}
+
 async function setRating(value: 1 | -1): Promise<void> {
   if (!isAuthenticated.value) {
     await router.push({ name: 'login', query: { next: '/patterns2', reason: 'rate' } })
@@ -62,7 +80,9 @@ async function setRating(value: 1 | -1): Promise<void> {
     rating.value = value
     tags.value = [] // reset reasons when flipping polarity
   }
-  await submit()
+  // Run concurrently, not chained: they're independent side effects of the
+  // same rating transition (rating POST + favorite create/remove).
+  await Promise.all([syncFavorite(), submit()])
 }
 
 async function toggleTag(tag: RatingTag): Promise<void> {
@@ -80,9 +100,8 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         class="rate__btn"
         :class="{ 'rate__btn--on': rating === 1 }"
         type="button"
-        :disabled="busy"
         :aria-pressed="rating === 1"
-        :title="isAuthenticated ? 'Good pattern' : 'Sign in to rate'"
+        :title="isAuthenticated ? 'Save + like' : 'Sign in to rate'"
         @click="setRating(1)"
       >
         👍
@@ -91,7 +110,6 @@ async function toggleTag(tag: RatingTag): Promise<void> {
         class="rate__btn"
         :class="{ 'rate__btn--on': rating === -1 }"
         type="button"
-        :disabled="busy"
         :aria-pressed="rating === -1"
         :title="isAuthenticated ? 'Bad pattern' : 'Sign in to rate'"
         @click="setRating(-1)"
