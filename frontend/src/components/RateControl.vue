@@ -94,10 +94,11 @@ async function toggleTag(tag: RatingTag): Promise<void> {
 
 <template>
   <div class="rate" role="group" aria-label="Rate this pattern">
+    <span class="rate__label">Rate</span>
     <div class="rate__thumbs">
       <button
         class="rate__btn"
-        :class="{ 'rate__btn--on': rating === 1 }"
+        :class="{ 'rate__btn--up': rating === 1 }"
         type="button"
         :disabled="busy"
         :aria-pressed="rating === 1"
@@ -109,7 +110,7 @@ async function toggleTag(tag: RatingTag): Promise<void> {
       </button>
       <button
         class="rate__btn"
-        :class="{ 'rate__btn--on': rating === -1 }"
+        :class="{ 'rate__btn--down': rating === -1 }"
         type="button"
         :disabled="busy"
         :aria-pressed="rating === -1"
@@ -121,7 +122,7 @@ async function toggleTag(tag: RatingTag): Promise<void> {
     </div>
 
     <span v-if="rating === 1 && savedId" class="rate__saved">★ saved to favorites</span>
-    <span class="rate__hint">👍 rates + saves</span>
+    <span v-else class="rate__hint">saves to your favorites</span>
 
     <div v-if="rating !== 0" class="rate__reasons">
       <button
@@ -149,16 +150,34 @@ async function toggleTag(tag: RatingTag): Promise<void> {
 </template>
 
 <style scoped>
-.rate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rate__thumbs { display: flex; gap: 6px; }
-.rate__btn {
-  padding: 4px 10px; border-radius: var(--r-sm); border: 1px solid var(--edge);
-  background: transparent; font-size: 0.95rem; line-height: 1; cursor: pointer;
+.rate {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised), var(--panel));
 }
-.rate__btn--on { border-color: var(--amber-dim); box-shadow: inset 0 0 0 1px var(--amber-dim); }
+.rate__label {
+  font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.rate__thumbs { display: flex; gap: 8px; }
+.rate__btn {
+  min-width: 42px; padding: 5px 12px; border-radius: var(--r-sm); border: 1px solid var(--edge);
+  background: linear-gradient(180deg, var(--raised-hi), var(--panel));
+  font-size: 1.05rem; line-height: 1; cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.18s ease;
+}
+.rate__btn:hover:not(:disabled) { box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.28); }
+.rate__btn--up {
+  border-color: var(--amber-dim);
+  box-shadow: inset 0 0 0 1px var(--amber-dim), 0 0 12px -4px var(--amber-glow);
+}
+.rate__btn--down { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+.rate__btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .rate__saved { font-family: var(--font-mono); font-size: 0.62rem; color: var(--amber-bright); }
-.rate__hint { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-faint); }
-.rate__reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rate__hint { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-faint); }
+.rate__reasons {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 2px;
+}
 .rate__chip {
   padding: 3px 8px; border-radius: var(--r-sm); border: 1px dashed var(--edge);
   background: transparent; color: var(--text-dim); font-family: var(--font-mono);
