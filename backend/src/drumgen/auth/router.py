@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from drumgen.auth import service
 from drumgen.auth.deps import CurrentUser, SessionDep, SettingsDep
 from drumgen.auth.errors import (
+    AccountBlockedError,
     EmailNotVerifiedError,
     InvalidCredentialsError,
     InvalidTokenError,
@@ -65,6 +66,8 @@ async def login(
         user = await service.authenticate(session, email=str(body.email), password=body.password)
     except EmailNotVerifiedError:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Email not verified") from None
+    except AccountBlockedError:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been blocked") from None
     except InvalidCredentialsError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password") from None
     token = await service.create_session(session, settings, user, request.headers.get("user-agent"))

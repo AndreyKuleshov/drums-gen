@@ -16,6 +16,8 @@ class AdminUserOut(BaseModel):
     display_name: str
     is_admin: bool
     is_verified: bool
+    is_blocked: bool
+    blocked_at: datetime | None
     created_at: datetime
 
     @classmethod
@@ -26,9 +28,15 @@ class AdminUserOut(BaseModel):
             display_name=user.display_name,
             is_admin=user.is_admin,
             is_verified=user.is_verified,
+            is_blocked=user.is_blocked,
+            blocked_at=user.blocked_at,
             created_at=user.created_at,
         )
 
 
 class SetAdminIn(BaseModel):
     is_admin: bool
+
+
+class SetBlockedIn(BaseModel):
+    is_blocked: bool

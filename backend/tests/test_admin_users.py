@@ -83,3 +83,73 @@ async def test_patch_unknown_user_404(client: AsyncClient, outbox: Outbox) -> No
     missing = "00000000-0000-0000-0000-000000000000"
     resp = await client.patch(f"/admin/users/{missing}", json={"is_admin": True})
     assert resp.status_code == 404
+
+
+async def _set_blocked(email: str) -> None:
+    from sqlalchemy import select
+
+    from drumgen.api import app
+    from drumgen.auth import service
+    from drumgen.db.engine import get_session
+    from drumgen.db.models import User
+
+    agen = app.dependency_overrides[get_session]()
+    session = await agen.__anext__()
+    try:
+        user = await session.scalar(select(User).where(User.email == email))
+        assert user is not None
+        await service.set_blocked(session, user, blocked=True)
+    finally:
+        await agen.aclose()
+
+
+async def test_admin_blocks_then_unblocks(client: AsyncClient, outbox: Outbox) -> None:
+    victim_id = await _signed_in(client, outbox, "victim@example.com")
+    await client.post("/auth/logout")
+    await _signed_in(client, outbox, "boss3@example.com")
+    await _make_admin("boss3@example.com")
+
+    blocked = await client.patch(f"/admin/users/{victim_id}/block", json={"is_blocked": True})
+    assert blocked.status_code == 200
+    assert blocked.json()["is_blocked"] is True
+    assert blocked.json()["blocked_at"] is not None
+
+    # A blocked user can no longer sign in.
+    denied = await client.post(
+        "/auth/login", json={"email": "victim@example.com", "password": "password123"}
+    )
+    assert denied.status_code == 403
+
+    unblocked = await client.patch(f"/admin/users/{victim_id}/block", json={"is_blocked": False})
+    assert unblocked.status_code == 200
+    assert unblocked.json()["is_blocked"] is False
+    assert unblocked.json()["blocked_at"] is None
+
+    # Unblocking restores sign-in.
+    ok = await client.post(
+        "/auth/login", json={"email": "victim@example.com", "password": "password123"}
+    )
+    assert ok.status_code == 200
+
+
+async def test_block_revokes_live_session(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox, "live@example.com")
+    assert (await client.get("/auth/me")).status_code == 200
+    await _set_blocked("live@example.com")
+    # The still-present session cookie is rejected the moment the block lands.
+    assert (await client.get("/auth/me")).status_code == 401
+
+
+async def test_admin_cannot_block_self(client: AsyncClient, outbox: Outbox) -> None:
+    own_id = await _signed_in(client, outbox, "selfblock@example.com")
+    await _make_admin("selfblock@example.com")
+    resp = await client.patch(f"/admin/users/{own_id}/block", json={"is_blocked": True})
+    assert resp.status_code == 400
+
+
+async def test_block_unknown_user_404(client: AsyncClient, outbox: Outbox) -> None:
+    await _signed_in(client, outbox, "boss4@example.com")
+    await _make_admin("boss4@example.com")
+    missing = "00000000-0000-0000-0000-000000000000"
+    resp = await client.patch(f"/admin/users/{missing}/block", json={"is_blocked": True})
+    assert resp.status_code == 404
