@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 
-import AuthNav from '../components/AuthNav.vue'
 import RatingPreviewModal from '../components/RatingPreviewModal.vue'
 import { adminListRatings, adminModerate, type AdminRating, type RatingSummary } from '../lib/ratings'
 
@@ -44,71 +42,57 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="stage">
-    <div class="console">
-      <header class="console__head">
-        <div class="brand">
-          <span class="brand__mark" aria-hidden="true">RG</span>
-          <span class="brand__name">Ratings</span>
-        </div>
-        <div class="brand__meta">
-          <RouterLink to="/" class="nav-link">&larr; Generator</RouterLink>
-          <AuthNav />
-          <span class="led led--on" aria-hidden="true" />
-        </div>
-      </header>
+  <section>
+    <section v-if="summary" class="ratesum">
+      <span class="ratesum__stat">Total <b>{{ summary.total }}</b></span>
+      <span class="ratesum__stat">👍 <b>{{ summary.likes }}</b></span>
+      <span class="ratesum__stat">👎 <b>{{ summary.dislikes }}</b></span>
+      <span v-for="tc in summary.top_dislike_tags" :key="tc.tag" class="ratesum__tag">
+        {{ tc.tag.replace(/_/g, ' ') }} · {{ tc.count }}
+      </span>
+    </section>
 
-      <section v-if="summary" class="ratesum">
-        <span class="ratesum__stat">Total <b>{{ summary.total }}</b></span>
-        <span class="ratesum__stat">👍 <b>{{ summary.likes }}</b></span>
-        <span class="ratesum__stat">👎 <b>{{ summary.dislikes }}</b></span>
-        <span v-for="tc in summary.top_dislike_tags" :key="tc.tag" class="ratesum__tag">
-          {{ tc.tag.replace(/_/g, ' ') }} · {{ tc.count }}
-        </span>
-      </section>
+    <label class="ratefilter">
+      <input v-model="includeModerated" type="checkbox" @change="load" />
+      show moderated
+    </label>
 
-      <label class="ratefilter">
-        <input v-model="includeModerated" type="checkbox" @change="load" />
-        show moderated
-      </label>
+    <p v-if="loading" class="muted">Loading…</p>
+    <p v-else-if="error" class="muted" role="alert">{{ error }}</p>
+    <p v-else-if="items.length === 0" class="muted">No ratings yet.</p>
 
-      <p v-if="loading" class="muted">Loading…</p>
-      <p v-else-if="error" class="muted" role="alert">{{ error }}</p>
-      <p v-else-if="items.length === 0" class="muted">No ratings yet.</p>
-
-      <div v-else class="ratetable-wrap">
-        <table class="ratetable">
-          <thead>
-            <tr>
-              <th>Rating</th><th>Tags</th><th>Note</th><th>Kind</th>
-              <th>Params</th><th>Ver</th><th>Rater</th><th>When</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in items" :key="row.id" :class="{ 'is-out': row.moderated_out }">
-              <td>{{ row.rating > 0 ? '👍' : '👎' }}</td>
-              <td>{{ row.tags.join(', ') }}</td>
-              <td>{{ row.note }}</td>
-              <td>{{ row.kind }}</td>
-              <td class="ratetable__params">{{ paramSummary(row.params) }}</td>
-              <td>{{ row.generator_version }}</td>
-              <td>{{ row.rater_email }}</td>
-              <td>{{ new Date(row.created_at).toLocaleString() }}</td>
-              <td class="ratetable__actions">
-                <button type="button" class="ratebtn" @click="preview = row">View</button>
-                <button
-                  v-if="!row.moderated_out"
-                  type="button"
-                  class="ratebtn ratebtn--danger"
-                  @click="remove(row)"
-                >
-                  Remove
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div v-else class="ratetable-wrap">
+      <table class="ratetable">
+        <thead>
+          <tr>
+            <th>Rating</th><th>Tags</th><th>Note</th><th>Kind</th>
+            <th>Params</th><th>Ver</th><th>Rater</th><th>When</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in items" :key="row.id" :class="{ 'is-out': row.moderated_out }">
+            <td>{{ row.rating > 0 ? '👍' : '👎' }}</td>
+            <td>{{ row.tags.join(', ') }}</td>
+            <td>{{ row.note }}</td>
+            <td>{{ row.kind }}</td>
+            <td class="ratetable__params">{{ paramSummary(row.params) }}</td>
+            <td>{{ row.generator_version }}</td>
+            <td>{{ row.rater_email }}</td>
+            <td>{{ new Date(row.created_at).toLocaleString() }}</td>
+            <td class="ratetable__actions">
+              <button type="button" class="ratebtn" @click="preview = row">View</button>
+              <button
+                v-if="!row.moderated_out"
+                type="button"
+                class="ratebtn ratebtn--danger"
+                @click="remove(row)"
+              >
+                Remove
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <RatingPreviewModal
@@ -118,7 +102,7 @@ onMounted(load)
       :tempo="Number((preview.params as Record<string, unknown>).tempo_bpm) || undefined"
       @close="preview = null"
     />
-  </main>
+  </section>
 </template>
 
 <style scoped>

@@ -36,16 +36,22 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/admin/ratings',
-      name: 'admin-ratings',
-      component: () => import('../views/AdminRatingsView.vue'),
+      path: '/admin',
+      component: () => import('../views/AdminView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
-    },
-    {
-      path: '/admin/users',
-      name: 'admin-users',
-      component: () => import('../views/AdminUsersView.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        { path: '', redirect: '/admin/ratings' },
+        {
+          path: 'ratings',
+          name: 'admin-ratings',
+          component: () => import('../views/AdminRatingsView.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/AdminUsersView.vue'),
+        },
+      ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
