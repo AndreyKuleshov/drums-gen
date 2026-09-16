@@ -13,8 +13,13 @@ const opts = { global: { stubs: { ScoreView: true, GrooveScore: true, teleport: 
 
 describe('RatingPreviewModal', () => {
   it('renders a groove and plays it with a step callback + metronome flag', async () => {
-    const wrapper = mount(RatingPreviewModal, { props: { kind: 'pattern', pattern: { bars: [] }, tempo: 100 }, ...opts })
+    const wrapper = mount(RatingPreviewModal, {
+      props: { kind: 'pattern', pattern: { bars: [] }, tempo: 100, ver: '2026-09-15', rater: 'a@b.c' },
+      ...opts,
+    })
     expect(wrapper.html()).toContain('groove-score')
+    expect(wrapper.text()).toContain('a@b.c') // header shows the rater
+    expect(wrapper.text().toLowerCase()).toContain('pattern') // header shows the kind
     await wrapper.find('[data-test="metronome"]').setValue(true)
     await wrapper.find('.ratebtn').trigger('click') // Play
     expect(playGroove).toHaveBeenCalled()
@@ -24,7 +29,10 @@ describe('RatingPreviewModal', () => {
   })
 
   it('renders a phrase and plays it', async () => {
-    const wrapper = mount(RatingPreviewModal, { props: { kind: 'exercise', pattern: { bars: [] }, tempo: 100 }, ...opts })
+    const wrapper = mount(RatingPreviewModal, {
+      props: { kind: 'exercise', pattern: { bars: [] }, tempo: 100, ver: '2026-09-15', rater: 'a@b.c' },
+      ...opts,
+    })
     expect(wrapper.html()).toContain('score-view')
     await wrapper.find('.ratebtn').trigger('click')
     expect(playPhrase).toHaveBeenCalled()

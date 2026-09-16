@@ -100,6 +100,8 @@ onMounted(load)
       :kind="preview.kind"
       :pattern="preview.pattern"
       :tempo="Number((preview.params as Record<string, unknown>).tempo_bpm) || undefined"
+      :ver="preview.generator_version"
+      :rater="preview.rater_email"
       @close="preview = null"
     />
   </section>
