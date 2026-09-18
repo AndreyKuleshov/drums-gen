@@ -462,100 +462,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         @phrase-note-click="onNoteClick"
       />
 
-      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
-           separate from the generation form below. Buttons hold their slots
-           (disabled when N/A) so the bar never reflows. -->
-      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
-        <button
-          type="button"
-          class="ptools__btn"
-          :class="{ 'is-active': revoiced }"
-          :disabled="!canRevoice || revoicing"
-          :aria-pressed="revoiced"
-          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
-          data-tip-align="left"
-          @click="toggleRevoice"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-          </svg>
-          Kit
-        </button>
-        <button
-          type="button"
-          class="ptools__btn"
-          :disabled="!revoiced || revoicing"
-          data-tip="Re-lay the same pattern across the kit differently"
-          @click="shuffleKit"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Shuffle
-        </button>
-
-        <span class="ptools__sep" aria-hidden="true" />
-
-        <button
-          type="button"
-          class="ptools__btn"
-          :class="{ 'is-active': mirrored }"
-          :aria-pressed="mirrored"
-          data-tip="Mirror the whole sticking R↔L"
-          @click="mirrored = !mirrored"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Alt sticking
-        </button>
-
-        <button
-          type="button"
-          class="ptools__btn ptools__btn--end"
-          :disabled="!canUndo"
-          data-tip="Undo the last change (⌘Z)"
-          @click="undo"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Undo
-        </button>
-      </div>
-
-      <TransportRack
-        ref="transport"
-        :can-play="canPlay"
-        :meter="meter"
-        :tempo="tempo"
-        :engine="engine"
-        @step="activeStep = $event"
-      />
-
       <p v-if="error" class="formmsg formmsg--error" role="alert">{{ error }}</p>
 
       <form class="controls" @submit.prevent="generate">
@@ -651,6 +557,100 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           </button>
         </div>
       </form>
+
+      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
+           separate from the generation form below. Buttons hold their slots
+           (disabled when N/A) so the bar never reflows. -->
+      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': revoiced }"
+          :disabled="!canRevoice || revoicing"
+          :aria-pressed="revoiced"
+          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+          data-tip-align="left"
+          @click="toggleRevoice"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          Kit
+        </button>
+        <button
+          type="button"
+          class="ptools__btn"
+          :disabled="!revoiced || revoicing"
+          data-tip="Re-lay the same pattern across the kit differently"
+          @click="shuffleKit"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Shuffle
+        </button>
+
+        <span class="ptools__sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': mirrored }"
+          :aria-pressed="mirrored"
+          data-tip="Mirror the whole sticking R↔L"
+          @click="mirrored = !mirrored"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Alt sticking
+        </button>
+
+        <button
+          type="button"
+          class="ptools__btn ptools__btn--end"
+          :disabled="!canUndo"
+          data-tip="Undo the last change (⌘Z)"
+          @click="undo"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Undo
+        </button>
+      </div>
+
+      <TransportRack
+        ref="transport"
+        :can-play="canPlay"
+        :meter="meter"
+        :tempo="tempo"
+        :engine="engine"
+        @step="activeStep = $event"
+      />
     </div>
   </main>
 

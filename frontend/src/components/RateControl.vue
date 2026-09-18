@@ -127,11 +127,18 @@ onBeforeUnmount(() => {
         type="button"
         :disabled="busy"
         :aria-pressed="rating === 1"
-        :title="isAuthenticated ? 'Save + like' : 'Sign in to rate'"
+        :data-tip="isAuthenticated ? 'Like + save to favorites' : 'Sign in to rate'"
+        data-tip-pos="below"
+        data-tip-align="right"
         aria-label="Like and save to favorites"
         @click="setRating(1)"
       >
-        👍
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path d="M7 10v12" />
+          <path
+            d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"
+          />
+        </svg>
       </button>
       <button
         class="rate__btn"
@@ -139,10 +146,18 @@ onBeforeUnmount(() => {
         type="button"
         :disabled="busy"
         :aria-pressed="rating === -1"
-        :title="isAuthenticated ? 'Dislike' : 'Sign in to rate'"
+        :data-tip="isAuthenticated ? 'Dislike' : 'Sign in to rate'"
+        data-tip-pos="below"
+        data-tip-align="right"
+        aria-label="Dislike this pattern"
         @click="setRating(-1)"
       >
-        👎
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path d="M17 14V2" />
+          <path
+            d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"
+          />
+        </svg>
       </button>
     </div>
 
@@ -189,31 +204,49 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 .rate__btn {
-  width: 40px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: var(--r-sm);
   border: 1px solid var(--edge);
   background: linear-gradient(180deg, var(--raised-hi), var(--panel));
-  font-size: 1.05rem;
-  line-height: 1;
+  color: var(--text-dim);
   cursor: pointer;
   box-shadow: var(--shadow-1);
   transition:
+    color 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.18s ease;
 }
+.rate__btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .rate__btn:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 1px rgba(255, 157, 60, 0.3);
+  color: var(--text);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 157, 60, 0.22);
 }
-.rate__btn--up {
+.rate__btn:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+/* Like = the positive, amber-latched state (matches the console's is-on toggles). */
+.rate__btn--up,
+.rate__btn--up:hover:not(:disabled) {
+  color: var(--amber-bright);
   border-color: var(--amber-dim);
-  box-shadow: inset 0 0 0 1px var(--amber-dim), 0 0 12px -4px var(--amber-glow);
+  box-shadow: inset 0 0 0 1px var(--amber-dim), 0 0 14px -4px var(--amber-glow);
 }
-.rate__btn--down {
-  border-color: var(--danger);
-  box-shadow: inset 0 0 0 1px var(--danger);
+/* Dislike is engaged, not an error — a neutral latch, never danger-red. */
+.rate__btn--down,
+.rate__btn--down:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+  box-shadow: inset 0 0 0 1px var(--text-faint);
 }
 .rate__btn:disabled {
   opacity: 0.55;
@@ -289,6 +322,12 @@ onBeforeUnmount(() => {
   color: var(--amber-bright);
   border-style: solid;
   border-color: var(--amber-dim);
+}
+.rate__chip:focus-visible,
+.rate__done:focus-visible,
+.rate__x:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
 }
 .rate__note {
   padding: 6px 8px;
