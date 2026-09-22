@@ -1,3 +1,5 @@
+import logging
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,13 +8,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from drumgen.account.router import router as account_router
 from drumgen.admin_users.router import router as admin_users_router
 from drumgen.auth.router import router as auth_router
 from drumgen.catalog import MVP_CATALOG
 from drumgen.config import get_settings
-from drumgen.db.engine import engine
+from drumgen.db.engine import SessionLocal, engine
+from drumgen.db.models import User
 from drumgen.domain.groove import Groove
 from drumgen.domain.models import Phrase
 from drumgen.generator import GenerateRequest, GenerationError, generate
@@ -21,9 +25,36 @@ from drumgen.patterns.router import router as patterns_router
 from drumgen.ratings.router import router as ratings_router
 from drumgen.sticking_generator import StickingRequest, generate_sticking, revoice_kit
 
+_log = logging.getLogger("drumgen.bootstrap")
+
+
+async def _bootstrap_admin() -> None:
+    """Promote one account to admin on startup when BOOTSTRAP_ADMIN_EMAIL is set.
+
+    Env-gated and idempotent — the only way to create the FIRST admin, since the
+    admin API itself requires an existing admin. The email is read from the
+    environment (never committed) and never logged; only whether it matched.
+    Any failure is swallowed so it can never block startup.
+    """
+    email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
+    if not email:
+        return
+    try:
+        async with SessionLocal() as session:
+            user = await session.scalar(select(User).where(User.email == email))
+            if user is None:
+                _log.warning("bootstrap admin: no account matches the configured email")
+                return
+            user.is_admin = True
+            await session.commit()
+        _log.info("bootstrap admin: promoted the configured account")
+    except Exception:
+        _log.exception("bootstrap admin failed")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+    await _bootstrap_admin()
     yield
     await engine.dispose()
 
