@@ -4,7 +4,7 @@
  * other off (a single shared Player per voice would retrigger and choke). */
 import * as Tone from 'tone'
 
-import { parseFraction, scheduleMetro, setOverlayClick } from './audio'
+import { parseFraction, patternBus, scheduleMetro, setOverlayClick } from './audio'
 import { beginSampleLoad, markSampleLoaded } from './samples'
 import type { Groove, Hit, Surface } from '../types'
 
@@ -47,7 +47,7 @@ async function ensureLoaded(): Promise<Record<Surface, Tone.ToneAudioBuffer>> {
 function playHit(buf: Tone.ToneAudioBuffer, time: number, vel: number): void {
   if (!buf.loaded) return
   try {
-    const gain = new Tone.Gain(vel).toDestination()
+    const gain = new Tone.Gain(vel).connect(patternBus())
     const src = new Tone.ToneBufferSource(buf).connect(gain)
     src.onended = (): void => {
       try {

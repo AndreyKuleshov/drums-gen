@@ -100,6 +100,14 @@ function initials(name: string): string {
           @click="close(false)"
           >Account</RouterLink
         >
+        <RouterLink
+          v-if="user?.is_admin"
+          to="/admin"
+          class="authnav__item"
+          role="menuitem"
+          @click="close(false)"
+          >Admin</RouterLink
+        >
         <button class="authnav__item" type="button" role="menuitem" @click="signOut">
           Sign out
         </button>

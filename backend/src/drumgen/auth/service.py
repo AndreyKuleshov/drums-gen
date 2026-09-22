@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from drumgen.auth.errors import (
+    AccountBlockedError,
     EmailNotVerifiedError,
     InvalidCredentialsError,
     InvalidTokenError,
@@ -148,6 +149,8 @@ async def authenticate(session: AsyncSession, *, email: str, password: str) -> U
         raise InvalidCredentialsError
     if user.email_verified_at is None:
         raise EmailNotVerifiedError
+    if user.is_blocked:
+        raise AccountBlockedError
     return user
 
 
@@ -173,7 +176,12 @@ async def user_for_session(session: AsyncSession, raw_token: str | None) -> User
     row = await session.scalar(select(Session).where(Session.token_hash == hash_token(raw_token)))
     if row is None or row.revoked_at is not None or row.expires_at < _now():
         return None
-    return await session.get(User, row.user_id)
+    user = await session.get(User, row.user_id)
+    # A block that lands mid-session cuts the user off immediately, even before
+    # the revoked session rows are read back.
+    if user is None or user.is_blocked:
+        return None
+    return user
 
 
 async def revoke_session(session: AsyncSession, raw_token: str) -> None:
@@ -181,6 +189,19 @@ async def revoke_session(session: AsyncSession, raw_token: str) -> None:
     if row is not None and row.revoked_at is None:
         row.revoked_at = _now()
         await session.commit()
+
+
+async def set_blocked(session: AsyncSession, user: User, *, blocked: bool) -> None:
+    """Block or unblock a user. Blocking revokes all of their live sessions."""
+    user.is_blocked = blocked
+    user.blocked_at = _now() if blocked else None
+    if blocked:
+        await session.execute(
+            update(Session)
+            .where(Session.user_id == user.id, Session.revoked_at.is_(None))
+            .values(revoked_at=_now())
+        )
+    await session.commit()
 
 
 async def request_password_reset(session: AsyncSession, settings: Settings, email: str) -> None:

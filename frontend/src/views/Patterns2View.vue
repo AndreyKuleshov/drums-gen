@@ -3,15 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AuthNav from '../components/AuthNav.vue'
-import GrooveScore from '../components/GrooveScore.vue'
-import LikeButton from '../components/LikeButton.vue'
-import ScoreView from '../components/ScoreView.vue'
+import NotationScreen from '../components/NotationScreen.vue'
 import Stepper from '../components/Stepper.vue'
 import TransportRack from '../components/TransportRack.vue'
 import type { PlayEngine } from '../components/TransportRack.vue'
 import { ApiError, apiFetch } from '../lib/api'
 import { parseFraction, playPhrase, stopPhrase } from '../lib/audio'
 import { playGroove, stopGroove } from '../lib/kit'
+import { takePendingGroove, takePendingPhrase } from '../lib/loadedPattern'
 import { persistedRef } from '../lib/storage'
 import type { Groove, Hit, Phrase } from '../types'
 
@@ -149,11 +148,27 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 const likePayload = computed(() => viewGroove.value ?? viewPhrase.value)
 const likeMeta = computed<Record<string, unknown>>(() => ({
   kind: displayGroove.value !== null ? 'pattern' : 'exercise',
+  view: 'patterns2', // which studio saved it — favorites reopen here
   level: revoiced.value ? 'Kit' : cap(voicing.value),
   meter: '4/4',
   feel: subdivision.value === 'mixed' ? 'Mixed' : subdivision.value,
   bars: bars.value,
   tempo: tempo.value,
+}))
+
+const ratingKind = computed<'exercise' | 'pattern'>(() =>
+  displayGroove.value !== null ? 'pattern' : 'exercise',
+)
+const ratingParams = computed<Record<string, unknown>>(() => ({
+  time_sig: { num: 4, den: 4 },
+  num_bars: bars.value,
+  subdivision: subdivision.value === 'mixed' ? '1/16' : subdivision.value,
+  mixed: subdivision.value === 'mixed',
+  tempo_bpm: tempo.value,
+  singles: singles.value,
+  odd: odd.value,
+  paradiddle: paradiddle.value,
+  voicing: voicing.value,
 }))
 
 // --- Note editor: click a note to toggle accent/ghost or flip the hand. Works
@@ -393,7 +408,22 @@ function onGlobalKey(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKey)
+  // A favorite opened from My Account lands here as a pending groove/phrase.
+  const g = takePendingGroove()
+  if (g !== null) {
+    groove.value = g
+    phrase.value = null
+    revoicedGroove.value = null
+  }
+  const p = takePendingPhrase()
+  if (p !== null) {
+    phrase.value = p
+    groove.value = null
+    revoicedGroove.value = null
+  }
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
 
@@ -416,135 +446,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
         </div>
       </header>
 
-      <section class="screen" aria-label="Notation display">
-        <div class="screen__glass">
-          <LikeButton
-            v-if="likePayload"
-            class="screen__like"
-            :payload="likePayload"
-            :meta="likeMeta"
-            next="/patterns2"
-          />
-          <!-- The notation is inset from the right while SAVE is shown, so the
-               first row's top-right (sticking + accents) never slides under the
-               floating button. -->
-          <div class="screen__stage" :class="{ 'screen__stage--inset': likePayload }">
-            <GrooveScore
-              v-if="viewGroove"
-              :groove="viewGroove"
-              :active-step="activeStep"
-              label-hihat
-              editable
-              @note-click="onGrooveNoteClick"
-            />
-            <ScoreView
-              v-else-if="viewPhrase"
-              :phrase="viewPhrase"
-              :active-step="activeStep"
-              editable
-              @note-click="onNoteClick"
-            />
-            <div v-else class="screen__empty">
-              <p class="screen__empty-text">
-                Toggle families and hit Generate for a sticking pattern.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
-           separate from the generation form below. Buttons hold their slots
-           (disabled when N/A) so the bar never reflows. -->
-      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
-        <button
-          type="button"
-          class="ptools__btn"
-          :class="{ 'is-active': revoiced }"
-          :disabled="!canRevoice || revoicing"
-          :aria-pressed="revoiced"
-          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
-          data-tip-align="left"
-          @click="toggleRevoice"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-          </svg>
-          Kit
-        </button>
-        <button
-          type="button"
-          class="ptools__btn"
-          :disabled="!revoiced || revoicing"
-          data-tip="Re-lay the same pattern across the kit differently"
-          @click="shuffleKit"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Shuffle
-        </button>
-
-        <span class="ptools__sep" aria-hidden="true" />
-
-        <button
-          type="button"
-          class="ptools__btn"
-          :class="{ 'is-active': mirrored }"
-          :aria-pressed="mirrored"
-          data-tip="Mirror the whole sticking R↔L"
-          @click="mirrored = !mirrored"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Alt sticking
-        </button>
-
-        <button
-          type="button"
-          class="ptools__btn ptools__btn--end"
-          :disabled="!canUndo"
-          data-tip="Undo the last change (⌘Z)"
-          @click="undo"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Undo
-        </button>
-      </div>
-
-      <TransportRack
-        ref="transport"
-        :can-play="canPlay"
-        :meter="meter"
-        :tempo="tempo"
-        :engine="engine"
-        @step="activeStep = $event"
+      <NotationScreen
+        :groove="viewGroove"
+        :phrase="viewPhrase"
+        :active-step="activeStep"
+        empty-text="Toggle families and hit Generate for a sticking pattern."
+        editable
+        label-hihat
+        :rate="likePayload"
+        :rate-kind="ratingKind"
+        :rate-params="ratingParams"
+        :rate-seed="null"
+        :rate-meta="likeMeta"
+        @groove-note-click="onGrooveNoteClick"
+        @phrase-note-click="onNoteClick"
       />
 
       <p v-if="error" class="formmsg formmsg--error" role="alert">{{ error }}</p>
@@ -642,6 +557,100 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
           </button>
         </div>
       </form>
+
+      <!-- Pattern actions: transforms and edits on the CURRENT pattern, kept
+           separate from the generation form below. Buttons hold their slots
+           (disabled when N/A) so the bar never reflows. -->
+      <div v-if="canPlay" class="ptools" role="toolbar" aria-label="Pattern actions">
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': revoiced }"
+          :disabled="!canRevoice || revoicing"
+          :aria-pressed="revoiced"
+          data-tip="Lay the sticking across the kit — snare, toms, hi-hat (no kick)"
+          data-tip-align="left"
+          @click="toggleRevoice"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="6" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="14" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="18.5" cy="14.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          Kit
+        </button>
+        <button
+          type="button"
+          class="ptools__btn"
+          :disabled="!revoiced || revoicing"
+          data-tip="Re-lay the same pattern across the kit differently"
+          @click="shuffleKit"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20M17 4l3 3-3 3M17 14l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Shuffle
+        </button>
+
+        <span class="ptools__sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          class="ptools__btn"
+          :class="{ 'is-active': mirrored }"
+          :aria-pressed="mirrored"
+          data-tip="Mirror the whole sticking R↔L"
+          @click="mirrored = !mirrored"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M8 7h9M8 7l3-3M8 7l3 3M16 17H7M16 17l-3-3M16 17l-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Alt sticking
+        </button>
+
+        <button
+          type="button"
+          class="ptools__btn ptools__btn--end"
+          :disabled="!canUndo"
+          data-tip="Undo the last change (⌘Z)"
+          @click="undo"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path
+              d="M9 7L4 11l5 4M4 11h9a5 5 0 0 1 0 10h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Undo
+        </button>
+      </div>
+
+      <TransportRack
+        ref="transport"
+        :can-play="canPlay"
+        :meter="meter"
+        :tempo="tempo"
+        :engine="engine"
+        @step="activeStep = $event"
+      />
     </div>
   </main>
 
@@ -855,50 +864,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   cursor: not-allowed;
 }
 
-.screen {
-  border-radius: var(--r-lg);
-  padding: 10px;
-  background: linear-gradient(180deg, #0f0d0b, #171310);
-  border: 1px solid var(--edge);
-}
-.screen__glass {
-  position: relative;
-  min-height: 200px;
-  border-radius: var(--r-md);
-  background: linear-gradient(180deg, #fbf6ec, var(--screen));
-  border: 1px solid var(--screen-edge);
-  display: flex;
-  align-items: center;
-}
-
-/* Holds the notation and fills the glass; margin (not padding) keeps the
-   measured width smaller so the score renders narrower than the glass. */
-.screen__stage {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-/* Reserve the top-right corner for the floating SAVE pill (80px + gap). */
-.screen__stage--inset {
-  margin-right: 100px;
-}
-
-.screen__like {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-}
-.screen__empty {
-  width: 100%;
-  padding: 40px 24px;
-  text-align: center;
-}
-.screen__empty-text {
-  color: #6b6252;
-}
 .formmsg--error {
   color: var(--danger);
   font-size: 0.88rem;

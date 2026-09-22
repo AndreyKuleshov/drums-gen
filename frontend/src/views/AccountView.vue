@@ -165,14 +165,23 @@ async function remove(id: string): Promise<void> {
   }
 }
 
+// Which view a favorite was saved from, so it reopens where it was made. New
+// saves carry meta.view; older ones are inferred from the Patterns 2.0-only
+// voicing labels (Kit/Snare/Linear), else default to the Studio.
+function savedView(fave: LikedPattern): '/patterns2' | '/' {
+  if (fave.meta.view === 'patterns2') return '/patterns2'
+  if (fave.meta.view === 'studio') return '/'
+  return ['Kit', 'Snare', 'Linear'].includes(String(fave.meta.level)) ? '/patterns2' : '/'
+}
+
 async function openInGenerator(fave: LikedPattern): Promise<void> {
-  // One page decides its mode from whichever pending pattern is set.
+  // Each generator view consumes whichever pending pattern is set on mount.
   if (isPattern(fave)) {
     setPendingGroove(fave.phrase as Groove)
   } else {
     setPendingPhrase(fave.phrase as Phrase)
   }
-  await router.push('/')
+  await router.push(savedView(fave))
 }
 
 function chip(fave: LikedPattern, key: string): string | null {

@@ -104,6 +104,9 @@ Candidate = tuple[Block, float, str]
 # 1024 covers the supported v1 space (4/4 at 1/16 for 64 bars = 1024 notes).
 _MAX_NOTES = 1024
 
+# Bump whenever generation logic changes, so stored ratings stay interpretable.
+GENERATOR_VERSION = "2026-09-15"
+
 
 class StickingRequest(BaseModel):
     time_sig: TimeSignature
