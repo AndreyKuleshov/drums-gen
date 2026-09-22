@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import ThumbIcon from './ThumbIcon.vue'
 import { useAuth } from '../lib/auth'
 import { likePattern, unlikePattern } from '../lib/patterns'
 import { ratePattern, type RatingTag } from '../lib/ratings'
@@ -133,12 +134,7 @@ onBeforeUnmount(() => {
         aria-label="Like and save to favorites"
         @click="setRating(1)"
       >
-        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
-          <path d="M7 10v12" />
-          <path
-            d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"
-          />
-        </svg>
+        <ThumbIcon dir="up" :size="19" />
       </button>
       <button
         class="rate__btn"
@@ -152,12 +148,7 @@ onBeforeUnmount(() => {
         aria-label="Dislike this pattern"
         @click="setRating(-1)"
       >
-        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
-          <path d="M17 14V2" />
-          <path
-            d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"
-          />
-        </svg>
+        <ThumbIcon dir="down" :size="19" />
       </button>
     </div>
 
@@ -218,13 +209,6 @@ onBeforeUnmount(() => {
     color 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.18s ease;
-}
-.rate__btn svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .rate__btn:hover:not(:disabled) {
   color: var(--text);

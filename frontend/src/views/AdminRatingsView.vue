@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import RatingPreviewModal from '../components/RatingPreviewModal.vue'
+import ThumbIcon from '../components/ThumbIcon.vue'
 import { adminListRatings, adminModerate, type AdminRating, type RatingSummary } from '../lib/ratings'
 
 const PAGE = 25
@@ -112,8 +113,12 @@ onMounted(load)
   <section>
     <section v-if="summary" class="ratesum">
       <span class="ratesum__stat">Total <b>{{ summary.total }}</b></span>
-      <span class="ratesum__stat">👍 <b>{{ summary.likes }}</b></span>
-      <span class="ratesum__stat">👎 <b>{{ summary.dislikes }}</b></span>
+      <span class="ratesum__stat">
+        <ThumbIcon dir="up" :size="15" class="thumb--like" /> <b>{{ summary.likes }}</b>
+      </span>
+      <span class="ratesum__stat">
+        <ThumbIcon dir="down" :size="15" class="thumb--dislike" /> <b>{{ summary.dislikes }}</b>
+      </span>
       <span v-for="tc in summary.top_dislike_tags" :key="tc.tag" class="ratesum__tag">
         {{ tc.tag.replace(/_/g, ' ') }} · {{ tc.count }}
       </span>
@@ -124,8 +129,8 @@ onMounted(load)
         rating
         <select v-model="ratingFilter" data-test="rating-filter" @change="applyFilters">
           <option value="">all</option>
-          <option value="1">👍</option>
-          <option value="-1">👎</option>
+          <option value="1">like</option>
+          <option value="-1">dislike</option>
         </select>
       </label>
       <label class="ratefilter">
@@ -160,7 +165,11 @@ onMounted(load)
           <tbody>
             <tr v-for="row in sorted" :key="row.id" :class="{ 'is-out': row.moderated_out }">
               <td>
-                {{ row.rating > 0 ? '👍' : '👎' }}
+                <ThumbIcon
+                  :dir="row.rating > 0 ? 'up' : 'down'"
+                  :size="18"
+                  :class="row.rating > 0 ? 'thumb--like' : 'thumb--dislike'"
+                />
                 <span v-if="row.moderated_out" class="ratetag-out">removed</span>
               </td>
               <td>{{ row.tags.join(', ') }}</td>
@@ -171,6 +180,7 @@ onMounted(load)
               <td>{{ row.rater_email }}</td>
               <td class="ratetable__nowrap">{{ new Date(row.created_at).toLocaleString() }}</td>
               <td class="ratetable__actions">
+                <div class="ratetable__actions-row">
                 <button type="button" class="ratebtn" :disabled="busyId === row.id" @click="preview = row">
                   View
                 </button>
@@ -198,6 +208,7 @@ onMounted(load)
                 >
                   Restore
                 </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -254,7 +265,12 @@ onMounted(load)
 .ratetable th.is-sortable:hover { color: var(--amber-bright); }
 .ratetable__params { font-family: var(--font-mono); white-space: nowrap; }
 .ratetable__nowrap { white-space: nowrap; }
-.ratetable__actions { display: flex; gap: 6px; }
+/* Keep the cell a real table-cell (stretches to the row height so its
+   border-bottom lines up); flex the buttons in an inner row instead. */
+.ratetable__actions { white-space: nowrap; }
+.ratetable__actions-row { display: flex; gap: 6px; }
+.thumb--like { color: var(--amber-bright); }
+.thumb--dislike { color: var(--text-dim); }
 .ratetable tr.is-out { opacity: 0.55; }
 .ratetag-out {
   font-family: var(--font-mono); font-size: 0.56rem; color: var(--danger);
